@@ -1,0 +1,7 @@
+# NO EXTERNAL NETWORK CALLS OR TELEMETRY
+streamlit
+pdfplumber
+python-docx
+pandas
+openpyxl
+xlrd
