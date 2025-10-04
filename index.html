@@ -1,0 +1,1273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YHIDC PDF Signer Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        /* Base styles (Light Mode) */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Light gray background (default light mode) */
+            color: #1a202c; /* Default dark text for body */
+            transition: background-color 0.3s, color 0.3s; /* Smooth transition for theme change */
+        }
+        .signature-canvas {
+            border: 1px solid #d1d5db; /* Light border for canvases */
+            background-color: #ffffff; /* White background for drawing */
+            border-radius: 0.5rem; /* Rounded corners */
+            cursor: crosshair;
+            touch-action: none; /* Prevent scrolling on canvas touch */
+        }
+        .input-field {
+            @apply mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500;
+        }
+        /* Custom scrollbar for PDF viewer */
+        #pdf-viewer::-webkit-scrollbar {
+            width: 8px;
+        }
+        #pdf-viewer::-webkit-scrollbar-track {
+            background: #e0e0e0;
+            border-radius: 10px;
+        }
+        #pdf-viewer::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 10px;
+        }
+        #pdf-viewer::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        /* Fullscreen Signature Modal Styles */
+        .fullscreen-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background-color: rgba(0, 0, 0, 0.85); /* Darker overlay */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000; /* Ensure it's on top */
+        }
+        .fullscreen-modal-content {
+            background-color: #ffffff;
+            padding: 1.5rem;
+            border-radius: 0.75rem; /* More rounded corners */
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.1); /* Larger shadow */
+            width: 90vw; /* Responsive width */
+            max-width: 900px; /* Max width for larger screens */
+            height: 80vh; /* Responsive height */
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+        .fullscreen-modal .signature-canvas {
+            flex-grow: 1; /* Make canvas fill available space */
+            width: 100%;
+            height: auto; /* Let flex-grow manage height */
+        }
+
+        /* --- Custom Button Styles based on user's image example --- */
+        .btn-base {
+            @apply px-6 py-3 font-semibold rounded-full shadow-md; /* Base styling for all new buttons */
+            transition: all 0.2s ease-in-out;
+            border: none; /* Ensure no default button borders */
+            cursor: pointer;
+            outline: none; /* Remove outline on focus */
+        }
+        .btn-base:hover {
+            transform: translateY(-2px); /* Slight lift effect */
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2); /* Enhanced shadow on hover */
+        }
+
+        .btn-red {
+            @apply bg-red-500 text-white; /* Tailwind red-500 */
+        }
+        .btn-red:hover {
+            @apply bg-red-600;
+        }
+
+        .btn-blue {
+            @apply bg-blue-500 text-white; /* Tailwind blue-500 */
+        }
+        .btn-blue:hover {
+            @apply bg-blue-600;
+        }
+
+        .btn-green {
+            @apply bg-green-500 text-white; /* Tailwind green-500 */
+        }
+        .btn-green:hover {
+            @apply bg-green-600;
+        }
+
+        /* Drag and Drop Area Specific Styles */
+        #drag-drop-area {
+            position: relative; /* Needed for absolute positioning of child elements */
+            overflow: hidden; /* Hide overflowing parts of the animation */
+            border: 4px dashed #60a5fa; /* A clear blue dashed border */
+            @apply flex flex-col items-center justify-center p-6 rounded-lg text-gray-500 cursor-pointer transition-colors duration-200 ease-in-out;
+            min-height: 100px; /* Ensure it has some height */
+        }
+        #drag-drop-area.drag-over {
+            @apply bg-blue-50 text-blue-700;
+            border-color: #3b82f6; /* A slightly darker blue when dragged over */
+        }
+
+        #drag-drop-area p, #drag-drop-area > svg { /* Target the direct SVG for static icon */
+            position: relative; /* Keep text/svg above the animation */
+            z-index: 10; /* Ensure content is on top */
+            pointer-events: none; /* Allow drag/drop events to pass through to the div */
+        }
+
+        /* --- Flying Document Animation Styles --- */
+        .flying-document {
+            position: absolute;
+            z-index: 5; /* Below text/svg */
+            color: #60a5fa; /* Default light blue document color */
+            transition: opacity 0.3s; /* Only opacity transition remains */
+        }
+
+        /* Pause animation and change opacity on drag over */
+        #drag-drop-area.drag-over .flying-document {
+            opacity: 0.3; /* Less visible when dragging over */
+        }
+
+        /* --- Dark Mode Styles --- */
+        body.dark-mode {
+            background-color: #1a202c; /* Dark background for body */
+            color: #e2e8f0; /* Light default text for body */
+        }
+
+        body.dark-mode .bg-white {
+            background-color: #2d3748; /* Darker background for main container */
+            color: #e2e8f0; /* Light text for main container */
+        }
+
+        /* Using !important for text colors to ensure override Tailwind defaults */
+        body.dark-mode .text-gray-900 { color: #f7fafc !important; }
+        body.dark-mode .text-gray-700 { color: #cbd5e0 !important; }
+        body.dark-mode .text-gray-500 { color: #a0aec0 !important; }
+        body.dark-mode .text-gray-400 { color: #718096 !important; } /* For smaller hints */
+        body.dark-mode .text-gray-800 { color: #e2e8f0 !important; } /* For message box text */
+
+        body.dark-mode .border-gray-200 {
+            border-color: #4a5568; /* Darker border for separators */
+        }
+
+        body.dark-mode .input-field {
+            background-color: #4a5568; /* Darker background for inputs */
+            border-color: #6a748a; /* Lighter border for inputs */
+            color: #e2e8f0; /* Light text in inputs */
+        }
+
+        body.dark-mode #pdf-viewer {
+            background-color: #2d3748; /* Darker background for PDF viewer */
+        }
+
+        body.dark-mode #drag-drop-area {
+            border-color: #63b3ed; /* Lighter blue dashed border for dark mode */
+        }
+        body.dark-mode #drag-drop-area.drag-over {
+            background-color: #2b6cb0; /* Darker blue background on drag over */
+            border-color: #3182ce;
+        }
+        /* Adjust flying document color for dark mode */
+        body.dark-mode .flying-document {
+            color: #90cdf4; /* Lighter blue document color in dark mode */
+        }
+
+        /* Adjust button file input colors for dark mode if needed (based on original file input styles) */
+        body.dark-mode .file\:mr-4 { /* Targets the file input button part */
+            background-color: #4299e1; /* blue-500 equivalent */
+            color: #ffffff; /* text-white */
+        }
+        body.dark-mode .file\:text-blue-700 {
+            color: #ffffff; /* ensure text is white */
+        }
+        body.dark-mode .hover\:file\:bg-blue-100:hover {
+            background-color: #3182ce; /* darker blue on hover */
+        }
+
+        /* Message box adjustments */
+        body.dark-mode #message-box .bg-white {
+            background-color: #2d3748; /* Darker background for message box */
+        }
+        body.dark-mode #message-box p {
+            color: #e2e8f0; /* Ensure message text is light */
+        }
+
+        /* Toggle switch specific styles */
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 60px;
+            height: 34px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 26px;
+            width: 26px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            -webkit-transition: .4s;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #2196F3;
+        }
+
+        input:focus + .slider {
+            box-shadow: 0 0 1px #2196F3;
+        }
+
+        input:checked + .slider:before {
+            -webkit-transform: translateX(26px);
+            -ms-transform: translateX(26px);
+            transform: translateX(26px);
+        }
+
+        /* Round sliders */
+        .slider.round {
+            border-radius: 34px;
+        }
+
+        .slider.round:before {
+            border-radius: 50%;
+        }
+
+        /* Icons for toggle switch */
+        .slider:after {
+            content: '☀️'; /* Sun icon for light mode */
+            position: absolute;
+            top: 50%;
+            left: 8px;
+            transform: translateY(-50%);
+            font-size: 16px;
+            transition: opacity 0.4s;
+            opacity: 1;
+        }
+
+        input:checked + .slider:after {
+            content: '🌙'; /* Moon icon for dark mode */
+            left: unset;
+            right: 8px;
+            opacity: 1; /* Ensure moon is visible */
+        }
+
+        input:not(:checked) + .slider:after {
+            opacity: 1; /* Ensure sun is visible when unchecked */
+        }
+
+        /* New custom class for consistent input section height */
+        .input-section-fixed-height {
+            height: 150px; /* Fixed height determined from Detainee section */
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start; /* Aligns content to the top */
+        }
+    </style>
+</head>
+<body class="p-8">
+    <div class="max-w-6xl mx-auto bg-white p-8 rounded-xl shadow-2xl space-y-8">
+        <div class="flex justify-between items-center mb-8">
+            <h1 class="text-4xl font-extrabold text-gray-900">YHIDC PDF Signer Tool</h1>
+            <!-- Theme Toggle Switch -->
+            <label class="toggle-switch">
+                <input type="checkbox" id="theme-toggle">
+                <span class="slider round"></span>
+            </label>
+        </div>
+
+        <!-- PDF Upload Section -->
+        <div class="mb-6 p-6 border-b border-gray-200">
+            <label for="pdf-upload" class="block text-lg font-medium text-gray-700 mb-3">Upload PDF File</label>
+            <!-- Updated accept attribute to only accept PDF files -->
+            <input type="file" id="pdf-upload" accept="application/pdf" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+
+            <div class="flex items-center justify-center my-4">
+                <span class="text-gray-500">OR</span>
+            </div>
+
+            <!-- New Drag and Drop Area with Flying Document Animation -->
+            <div id="drag-drop-area" class="drag-drop-area">
+                <!-- Flying Document Icon (SVG) -->
+                <div class="flying-document w-20 h-20">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+                        <path fill-rule="evenodd" d="M19.5 9V4.5H15A2.25 2.25 0 0012.75 2H7.5A2.25 2.25 0 005.25 4.5v15A2.25 2.25 0 007.5 22h9.75A2.25 2.25 0 0019.5 19.5V15m-1.5 0l-1.5-1.5m1.5 1.5l1.5 1.5M18 19.5l-1.5-1.5m1.5 1.5l1.5 1.5m-6-15l-1.5 1.5m1.5-1.5L15 4.5m-6 15l-1.5-1.5m1.5 1.5L9 21m-2.25-6.75l1.5 1.5M5.25 15l1.5-1.5M7.5 4.5l1.5 1.5M7.5 4.5l-1.5 1.5" clip-rule="evenodd" />
+                        <!-- Left Wing (simple triangle, adjusted for better integration) -->
+                        <path d="M4 12 L2 10 L2 14 Z" fill="currentColor" />
+                        <!-- Right Wing (simple triangle, adjusted for better integration) -->
+                        <path d="M20 12 L22 10 L22 14 Z" fill="currentColor" />
+                    </svg>
+                </div>
+
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 0115.9 6H16a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V8a2 2 0 012-2h1m4-1L12 3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p class="text-center">Drag & drop your PDF file here</p>
+                <p class="text-xs text-center text-gray-400 mt-1">Supported: PDF only</p>
+            </div>
+        </div>
+
+        <!-- PDF Display Area -->
+        <div id="pdf-viewer" class="mt-8 flex flex-col items-center justify-center bg-gray-100 p-4 rounded-lg shadow-inner overflow-y-auto max-h-[70vh]">
+            <p class="text-gray-500 text-center">Your PDF will be displayed here after upload.</p>
+        </div>
+
+        <!-- Signature and Name Input Section -->
+        <div class="grid md:grid-cols-2 gap-8 mt-12 p-6 border-t border-gray-200">
+            <!-- Officer Section (Left) -->
+            <div id="officer-signature-container">
+                <div class="input-section-fixed-height">
+                    <label for="officer-name" class="block text-md font-medium text-gray-700 mb-2">Officer Name</label>
+                    <input type="text" id="officer-name" class="input-field" placeholder="Enter Officer Name: John.S">
+                </div>
+                <p class="text-sm text-gray-500 mt-1">Sign below:</p>
+                <canvas id="officer-signature-canvas" class="signature-canvas w-full h-48 mt-2"></canvas>
+                <div class="flex gap-2 mt-3">
+                    <button id="clear-officer-signature" class="px-6 py-3 font-semibold rounded-full shadow-md bg-red-500 text-white hover:bg-red-600 transition duration-300 ease-in-out transform hover:-translate-y-0.5">Clear Signature</button>
+                    <button id="expand-officer-signature" class="px-6 py-3 font-semibold rounded-full shadow-md bg-blue-500 text-white hover:bg-blue-600 transition duration-300 ease-in-out transform hover:-translate-y-0.5">Expand Sign Area</button>
+                </div>
+            </div>
+
+            <!-- Detainee Section (Right) -->
+            <div id="detainee-signature-container">
+                <div class="input-section-fixed-height">
+                    <div class="flex flex-col gap-4">
+                        <div class="w-full">
+                            <label for="detainee-name" class="block text-md font-medium text-gray-700 mb-2">Detainee Name</label>
+                            <input type="text" id="detainee-name" class="input-field" placeholder="Enter Detainee Name">
+                        </div>
+                        <div class="w-full">
+                            <label for="service-id" class="block text-md font-medium text-gray-700 mb-2">Service ID</label>
+                            <input type="text" id="service-id" class="input-field" placeholder="Enter Service ID">
+                        </div>
+                    </div>
+                </div>
+
+                <p class="text-sm text-gray-500 mt-1">Sign below:</p>
+                <canvas id="detainee-signature-canvas" class="signature-canvas w-full h-48 mt-2"></canvas>
+                <div class="flex gap-2 mt-3">
+                    <button id="clear-detainee-signature" class="px-6 py-3 font-semibold rounded-full shadow-md bg-red-500 text-white hover:bg-red-600 transition duration-300 ease-in-out transform hover:-translate-y-0.5">Clear Signature</button>
+                    <button id="expand-detainee-signature" class="px-6 py-3 font-semibold rounded-full shadow-md bg-blue-500 text-white hover:bg-blue-600 transition duration-300 ease-in-out transform hover:-translate-y-0.5">Expand Sign Area</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generate PDF Button -->
+        <div class="mt-8 text-center p-6 border-t border-gray-200">
+            <button id="generate-pdf" class="px-6 py-3 font-semibold rounded-full shadow-md bg-green-500 text-white hover:bg-green-600 transition duration-300 ease-in-out transform hover:-translate-y-0.5">Generate Signed PDF</button>
+        </div>
+    </div>
+
+    <!-- Message Box for Alerts (instead of alert()) -->
+    <div id="message-box" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="bg-white p-6 rounded-lg shadow-lg max-w-sm w-full text-center">
+            <p id="message-text" class="text-lg font-semibold text-gray-800 mb-4"></p>
+            <button id="close-message-box" class="px-6 py-3 font-semibold rounded-full shadow-md bg-blue-500 text-white hover:bg-blue-600 transition duration-300 ease-in-out transform hover:-translate-y-0.5">OK</button>
+        </div>
+    </div>
+
+    <!-- Fullscreen Signature Modal -->
+    <div id="fullscreen-signature-modal" class="fullscreen-modal hidden">
+        <div class="fullscreen-modal-content">
+            <h2 class="text-2xl font-bold text-gray-900 text-center">Sign Here</h2>
+            <!-- This is the single canvas used for fullscreen signing -->
+            <canvas id="fullscreen-signature-canvas" class="signature-canvas"></canvas>
+            <button id="shrink-signature-area" class="px-6 py-3 font-semibold rounded-full shadow-md bg-green-500 text-white hover:bg-green-600 transition duration-300 ease-in-out transform hover:-translate-y-0.5 mt-4">Done Signing</button>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 hidden">
+        <div class="flex flex-col items-center">
+            <div class="animate-spin rounded-full h-16 w-16 border-b-4 border-white mb-4"></div>
+            <p class="text-white text-lg font-medium">Generating PDF...</p>
+        </div>
+    </div>
+
+    <!-- PDF.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.min.js"></script>
+    <script>
+        // Set up PDF.js worker path
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.4.120/pdf.worker.min.js';
+    </script>
+
+    <!-- pdf-lib library -->
+    <script src="https://cdn.jsdelivr.net/npm/pdf-lib/dist/pdf-lib.min.js"></script>
+
+    <!-- SignaturePad library -->
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.0.0/dist/signature_pad.umd.min.js"></script>
+
+    <script>
+        // Global unhandledrejection listener to catch any stray promise rejections
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('Unhandled Promise Rejection:', event.reason);
+            event.preventDefault(); // Re-adding this to suppress console noise specific to this environment
+        });
+
+        const pdfUploadInput = document.getElementById('pdf-upload');
+        const pdfViewerDiv = document.getElementById('pdf-viewer');
+        const detaineeNameInput = document.getElementById('detainee-name');
+        const serviceIdInput = document.getElementById('service-id');
+        const officerNameInput = document.getElementById('officer-name');
+        const detaineeSignatureCanvas = document.getElementById('detainee-signature-canvas');
+        const officerSignatureCanvas = document.getElementById('officer-signature-canvas');
+        const clearDetaineeSignatureBtn = document.getElementById('clear-detainee-signature');
+        const clearOfficerSignatureBtn = document.getElementById('clear-officer-signature');
+        const expandDetaineeSignatureBtn = document.getElementById('expand-detainee-signature');
+        const expandOfficerSignatureBtn = document.getElementById('expand-officer-signature');
+        const generatePdfBtn = document.getElementById('generate-pdf');
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+        const closeMessageBoxBtn = document.getElementById('close-message-box');
+        const loadingOverlay = document.getElementById('loading-overlay');
+
+        const fullscreenSignatureModal = document.getElementById('fullscreen-signature-modal');
+        const fullscreenSignatureCanvas = document.getElementById('fullscreen-signature-canvas');
+        const shrinkSignatureAreaBtn = document.getElementById('shrink-signature-area');
+
+        // Drag and Drop elements
+        const dragDropArea = document.getElementById('drag-drop-area');
+        const flyingDocument = document.querySelector('.flying-document');
+
+        // Theme Toggle element
+        const themeToggle = document.getElementById('theme-toggle');
+
+        let originalPdfBytes = null;
+        let pdfDoc = null;
+        let pdfImageCanvas = null; // Canvas to hold a rendering of the PDF page image
+
+        // Hardcoded replacements based on user's request
+        const replacements = [
+            { find: 'dpham', replace: 'Duy.P' },
+            { find: 'sthomas', replace: 'Shaju.T' },
+            { find: 'TTyrna', replace: 'Theona.T' },
+            { find: 'cvaipo', replace: 'Chance.V' },
+            { find: 'mlatavao', replace: 'Siu.L' },
+            { find: 'crichardson', replace: 'Colin.R' },
+            { find: 'rdeilami', replace: 'Roger.D' },
+        ];
+
+        let animationFrameId; // To store the requestAnimationFrame ID
+        let targetX = 0; // Target X offset for top-left of flying-document
+        let targetY = 0; // Target Y offset for top-left of flying-document
+        let currentX = 0; // Current X offset for top-left of flying-document
+        let currentY = 0; // Current Y offset for top-left of flying-document
+        let currentRotationAngle = 0; // To control rotation via JS
+        const animationSpeed = 0.05; // Controls how fast it moves to the target
+
+        // Function to generate new random target position
+        function setRandomTarget() {
+            const containerRect = dragDropArea.getBoundingClientRect();
+            const documentRect = flyingDocument.getBoundingClientRect();
+
+            // Calculate the maximum X and Y coordinates for the top-left corner of the flying document
+            // to stay within the container, respecting its own dimensions and padding.
+            const padding = 10;
+
+            // maxX and maxY are the maximum *top-left* coordinates the flying document can have
+            // and still be fully inside the container with padding.
+            const maxX = Math.max(padding, containerRect.width - documentRect.width - padding);
+            const maxY = Math.max(padding, containerRect.height - documentRect.height - padding);
+
+            // If the container is too small to even allow for padding, just keep it centered.
+            if (containerRect.width < (documentRect.width + 2 * padding) || containerRect.height < (documentRect.height + 2 * padding)) {
+                targetX = (containerRect.width / 2) - (documentRect.width / 2);
+                targetY = (containerRect.height / 2) - (documentRect.height / 2);
+                console.warn("Drag-drop area might be too small for free random movement with current padding.");
+                return;
+            }
+
+            // Generate random target positions within the allowed range (from padding to maxX/maxY)
+            targetX = padding + Math.random() * (maxX - padding);
+            targetY = padding + Math.random() * (maxY - padding);
+        }
+
+        // Animation loop
+        function animateFlyingDocument() {
+            // Smoothly interpolate current position towards target position
+            currentX += (targetX - currentX) * animationSpeed;
+            currentY += (targetY - currentY) * animationSpeed;
+
+            // Update rotation angle
+            currentRotationAngle = (currentRotationAngle + 0.5) % 360; // Rotate by 0.5 degrees per frame
+
+            // Apply absolute positioning and rotation
+            flyingDocument.style.left = `${currentX}px`;
+            flyingDocument.style.top = `${currentY}px`;
+            flyingDocument.style.transform = `rotate(${currentRotationAngle}deg)`; // Only rotation here
+
+            // If close enough to target, set new target
+            if (Math.abs(targetX - currentX) < 1 && Math.abs(targetY - currentY) < 1) {
+                setRandomTarget();
+            }
+
+            // Only continue animation if not in drag-over state
+            if (!dragDropArea.classList.contains('drag-over')) {
+                animationFrameId = requestAnimationFrame(animateFlyingDocument);
+            }
+        }
+
+        // SignaturePad instances for the small canvases
+        // IMPORTANT: Changed background to transparent for clean PDF embedding
+        const detaineeSignaturePad = new SignaturePad(detaineeSignatureCanvas, {
+            backgroundColor: 'rgba(0, 0, 0, 0)',
+            penColor: 'rgb(0, 0, 0)',
+            minWidth: 1,
+            maxWidth: 3,
+        });
+        const officerSignaturePad = new SignaturePad(officerSignatureCanvas, {
+            backgroundColor: 'rgba(0, 0, 0, 0)', // Changed to transparent
+            penColor: 'rgb(0, 0, 0)',
+            minWidth: 1,
+            maxWidth: 3,
+        });
+
+        // SignaturePad instance for the fullscreen canvas (always present but only active in modal)
+        const fullscreenPad = new SignaturePad(fullscreenSignatureCanvas, {
+            backgroundColor: 'rgba(0, 0, 0, 0)', // Changed to transparent
+            penColor: 'rgb(0, 0, 0)',
+            minWidth: 1,
+            maxWidth: 3,
+        });
+        fullscreenPad.off(); // Initially disable drawing on the fullscreen pad
+
+        let activeSignaturePad = null; // To keep track of which small pad is currently being edited in fullscreen
+        let savedSignatureDataURL = null; // To hold the signature data during the transfer
+
+        // Function to resize canvas for high resolution
+        function resizeCanvas(canvas, signaturePadInstance, isFullscreen = false) {
+            const data = signaturePadInstance.toData();
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            if (!isFullscreen) {
+                // For main canvases, also ensure they are cleared to prevent ghosting
+                canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+            }
+            canvas.getContext('2d').scale(ratio, ratio);
+            signaturePadInstance.fromData(data); // Redraw the data
+        }
+
+        // Global resize listener to make canvases responsive
+        window.addEventListener('resize', () => {
+            resizeCanvas(detaineeSignatureCanvas, detaineeSignaturePad);
+            resizeCanvas(officerSignatureCanvas, officerSignaturePad);
+            if (!fullscreenSignatureModal.classList.contains('hidden')) {
+                resizeCanvas(fullscreenSignatureCanvas, fullscreenPad, true);
+            }
+
+            // Recalculate and start flying animation if window is resized and not dragging
+            if (!dragDropArea.classList.contains('drag-over')) {
+                cancelAnimationFrame(animationFrameId); // Stop existing animation
+                setRandomTarget(); // Set a new target based on new size
+                animateFlyingDocument(); // Resume animation
+            }
+        });
+
+        // Initial resize for all canvases on load
+        resizeCanvas(detaineeSignatureCanvas, detaineeSignaturePad);
+        resizeCanvas(officerSignatureCanvas, officerSignaturePad);
+        resizeCanvas(fullscreenSignatureCanvas, fullscreenPad, true); // Resize fullscreen canvas even if hidden
+
+        // Show custom message box
+        function showMessageBox(message) {
+            messageText.textContent = message;
+            messageBox.classList.remove('hidden');
+        }
+
+        // Close custom message box
+        closeMessageBoxBtn.addEventListener('click', () => {
+            messageBox.classList.add('hidden');
+        });
+
+        // Function to render PDF
+        async function renderPdf(file) {
+            pdfViewerDiv.innerHTML = '';
+            pdfViewerDiv.classList.add('overflow-y-auto', 'max-h-[70vh]');
+            loadingOverlay.classList.remove('hidden'); // Show loading overlay
+
+            try {
+                if (file.type === 'application/pdf') {
+                    const arrayBuffer = await file.arrayBuffer();
+                    originalPdfBytes = new Uint8Array(arrayBuffer).slice().buffer; // Robust copy
+
+                    const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+                    pdfDoc = await loadingTask.promise;
+
+                    // Clear any previous pdfImageCanvas
+                    if (pdfImageCanvas) {
+                        pdfImageCanvas = null;
+                    }
+
+                    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+                        const page = await pdfDoc.getPage(pageNum);
+                        const viewport = page.getViewport({ scale: 1.5 });
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        canvas.classList.add('mb-4', 'shadow-md', 'rounded');
+                        pdfViewerDiv.appendChild(canvas);
+
+                        // Create a hidden canvas to get pixel data
+                        if (!pdfImageCanvas) {
+                            pdfImageCanvas = document.createElement('canvas');
+                            pdfImageCanvas.width = viewport.width;
+                            pdfImageCanvas.height = viewport.height;
+                        }
+
+                        const renderContext = {
+                            canvasContext: context,
+                            viewport: viewport,
+                        };
+                        await page.render(renderContext).promise;
+                    }
+                    loadingOverlay.classList.add('hidden'); // Hide overlay after successful PDF render
+                } else {
+                    showMessageBox('Unsupported file type. Please upload a PDF file only.');
+                    pdfViewerDiv.innerHTML = '<p class="text-gray-500 text-center">Your PDF will be displayed here after upload.</p>';
+                    originalPdfBytes = null;
+                    loadingOverlay.classList.add('hidden'); // Hide overlay for unsupported type
+                }
+            } catch (error) {
+                console.error('Error rendering file:', error);
+                showMessageBox('Failed to process file. Please try a different file.');
+                pdfViewerDiv.innerHTML = '<p class="text-red-500 text-center">Error loading file. Please try again.</p>';
+                originalPdfBytes = null;
+                    loadingOverlay.classList.add('hidden'); // Hide overlay on error
+            }
+        }
+
+        // PDF Upload Event Listener
+        pdfUploadInput.addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                try {
+                    await renderPdf(file);
+                } catch (error) {
+                    console.error('Error during PDF rendering triggered by upload:', error);
+                    showMessageBox('Failed to process file upon upload. Please try a different file.');
+                    loadingOverlay.classList.add('hidden');
+                }
+            } else {
+                showMessageBox('Please upload a valid PDF file.');
+                pdfViewerDiv.innerHTML = '<p class="text-gray-500 text-center">Your PDF will be displayed here after upload.</p>';
+            }
+        });
+
+        // --- Drag and Drop Event Listeners (updated for CSS animation) ---
+        dragDropArea.addEventListener('dragover', (event) => {
+            event.preventDefault(); // Prevent default to allow drop
+            dragDropArea.classList.add('drag-over');
+            cancelAnimationFrame(animationFrameId); // Pause JS animation
+            // When dragged over, snap to center
+            currentX = (dragDropArea.getBoundingClientRect().width / 2) - (flyingDocument.getBoundingClientRect().width / 2);
+            currentY = (dragDropArea.getBoundingClientRect().height / 2) - (flyingDocument.getBoundingClientRect().height / 2);
+            flyingDocument.style.left = `${currentX}px`;
+            flyingDocument.style.top = `${currentY}px`;
+            flyingDocument.style.transition = 'none'; // Temporarily disable all CSS transitions for instant snap
+        });
+
+        dragDropArea.addEventListener('dragleave', (event) => {
+            dragDropArea.classList.remove('drag-over');
+            flyingDocument.style.transition = 'opacity 0.3s'; // Re-enable only opacity transition
+            setRandomTarget(); // Set new target for smooth re-entry
+            animateFlyingDocument(); // Resume JS animation
+        });
+
+        dragDropArea.addEventListener('drop', async (event) => {
+            event.preventDefault(); // Prevent default to avoid opening file in browser
+            dragDropArea.classList.remove('drag-over');
+            flyingDocument.style.transition = 'opacity 0.3s'; // Re-enable only opacity transition
+            setRandomTarget(); // Set new target for smooth re-entry
+            animateFlyingDocument(); // Resume JS animation
+
+            if (event.dataTransfer.files && event.dataTransfer.files.length > 0) {
+                const file = event.dataTransfer.files[0];
+                // Check if the file type is supported (only PDF now)
+                if (file.type === 'application/pdf') {
+                    try {
+                        await renderPdf(file);
+                    } catch (error) {
+                        console.error('Error during PDF rendering triggered by drag-drop:', error);
+                        showMessageBox('Failed to process dropped file. Please try a different file.');
+                        loadingOverlay.classList.add('hidden');
+                    }
+                } else {
+                    showMessageBox('Unsupported file type dropped. Please drop a PDF file only.');
+                    pdfViewerDiv.innerHTML = '<p class="text-gray-500 text-center">Your PDF will be displayed here after upload.</p>';
+                }
+            } else {
+                showMessageBox('No file was dropped or an unsupported item was dropped.');
+            }
+        });
+
+        // Clear signature buttons
+        clearDetaineeSignatureBtn.addEventListener('click', () => {
+            detaineeSignaturePad.clear();
+        });
+
+        clearOfficerSignatureBtn.addEventListener('click', () => {
+            officerSignaturePad.clear();
+        });
+
+        // --- Fullscreen Signature Functionality ---
+        function expandSignaturePad(targetPad) {
+            // Store the active pad (small one)
+            activeSignaturePad = targetPad;
+
+            // Save the data to a data URL
+            savedSignatureDataURL = targetPad.toDataURL();
+
+            // Clear and hide the original small canvas
+            targetPad.clear();
+            targetPad.canvas.style.display = 'none';
+
+            // Show the modal
+            fullscreenSignatureModal.classList.remove('hidden');
+
+            // Resize the fullscreen canvas and draw the signature on it
+            resizeCanvas(fullscreenSignatureCanvas, fullscreenPad, true);
+            if (savedSignatureDataURL) {
+                fullscreenPad.fromDataURL(savedSignatureDataURL);
+            }
+            fullscreenPad.on(); // Enable drawing on fullscreen pad
+        }
+
+        function shrinkSignaturePad() {
+            if (!activeSignaturePad) return; // Should not happen if logic is correct
+
+            // Step 1: Get the data from the fullscreen pad *before* any resizing
+            const dataURL = fullscreenPad.toDataURL();
+
+            // Clear fullscreen pad and disable it
+            fullscreenPad.clear();
+            fullscreenPad.off();
+            savedSignatureDataURL = null; // Clear the saved data URL
+
+            // Hide the modal
+            fullscreenSignatureModal.classList.add('hidden');
+
+            // Show the original small canvas
+            activeSignaturePad.canvas.style.display = ''; // Revert display
+
+            // Step 2: Resize the small canvas to its correct, current dimensions
+            resizeCanvas(activeSignaturePad.canvas, activeSignaturePad);
+
+            // Step 3: Transfer the saved signature from fullscreen pad back to active (small) pad
+            if (dataURL) {
+                activeSignaturePad.fromDataURL(dataURL);
+            }
+
+            // Reset active pad reference
+            activeSignaturePad = null;
+        }
+
+        // Event Listeners for expand buttons
+        expandDetaineeSignatureBtn.addEventListener('click', () => {
+            expandSignaturePad(detaineeSignaturePad);
+        });
+
+        expandOfficerSignatureBtn.addEventListener('click', () => {
+            expandSignaturePad(officerSignaturePad);
+        });
+
+        // Event Listener for "Done Signing" button in fullscreen modal
+        shrinkSignatureAreaBtn.addEventListener('click', shrinkSignaturePad);
+
+        // Function to get the background color of a specific point on the PDF.js canvas
+        async function getBackgroundColor(page, x, y) {
+            const viewport = page.getViewport({ scale: 1.5 });
+            const tempCanvas = document.createElement('canvas');
+            const context = tempCanvas.getContext('2d', { willReadFrequently: true });
+            tempCanvas.width = viewport.width;
+            tempCanvas.height = viewport.height;
+
+            const renderContext = {
+                canvasContext: context,
+                viewport: viewport,
+            };
+            await page.render(renderContext).promise;
+
+            const pixelData = context.getImageData(x * 1.5, viewport.height - (y * 1.5), 1, 1).data;
+            return {
+                r: pixelData[0],
+                g: pixelData[1],
+                b: pixelData[2]
+            };
+        }
+
+        // --- Core logic for drawing the tiny initials on every page ---
+        async function drawTinyInitials(pdfPage, pageNumber, totalPages, embedDetails) {
+            if (totalPages <= 1 || pageNumber === totalPages) {
+                return; // Skip if single page or it's the last page
+            }
+
+            const { page, width, height, officerName, detaineeName, officerImage, detaineeImage, regularFont } = embedDetails;
+            const { rgb } = PDFLib;
+
+            // --- Tiny Initial Constants ---
+            const TINY_SCALE = 0.3; // Much smaller scale
+            const TINY_TEXT_SIZE = 8 * TINY_SCALE;
+            const TINY_MARGIN = 20; // Margin from bottom and sides in PDF points
+            const TINY_SIGNATURE_MAX_HEIGHT = 15;
+            const TINY_SIGNATURE_WIDTH = 50;
+            const TINY_LINE_THICKNESS = 0.5;
+            const TINY_SPACING = 2; // Spacing between name and signature line
+
+            const scaledTinySignatureMaxHeight = TINY_SIGNATURE_MAX_HEIGHT * TINY_SCALE;
+            const scaledTinySignatureWidth = TINY_SIGNATURE_WIDTH * TINY_SCALE;
+
+
+            // --- Officer (Bottom Left) ---
+            if (officerName.length > 0) {
+                const officerX = TINY_MARGIN;
+
+                // 1. Name Baseline (Top element)
+                const y_Name_Baseline = TINY_MARGIN + TINY_TEXT_SIZE + TINY_LINE_THICKNESS + scaledTinySignatureMaxHeight + TINY_SPACING;
+
+                // 2. Draw Officer Name
+                page.drawText(officerName, {
+                    x: officerX, y: y_Name_Baseline, font: regularFont, size: TINY_TEXT_SIZE, color: rgb(0, 0, 0),
+                });
+
+                // 3. Draw Signature Line
+                const y_Signature_Line = TINY_MARGIN + TINY_LINE_THICKNESS;
+                page.drawLine({
+                    start: { x: officerX, y: y_Signature_Line },
+                    end: { x: officerX + TINY_SIGNATURE_WIDTH, y: y_Signature_Line },
+                    thickness: TINY_LINE_THICKNESS,
+                    color: rgb(0, 0, 0),
+                });
+
+                // 4. Draw Signature Image
+                const officerSignatureAspectRatio = officerImage.width / officerImage.height;
+                let actualOfficerSignatureHeight = scaledTinySignatureMaxHeight;
+                let actualOfficerSignatureWidth = scaledTinySignatureMaxHeight * officerSignatureAspectRatio;
+
+                const officerImageX = officerX;
+                const officerImageY = y_Signature_Line + TINY_LINE_THICKNESS + TINY_SPACING;
+
+                page.drawImage(officerImage, {
+                    x: officerImageX,
+                    y: officerImageY,
+                    width: actualOfficerSignatureWidth,
+                    height: actualOfficerSignatureHeight,
+                });
+            }
+
+
+            // --- Detainee (Bottom Right) ---
+            if (detaineeName.length > 0) {
+                const detaineeX_End = width - TINY_MARGIN;
+
+                // 1. Name Baseline (Top element - same Y as Officer)
+                const y_Name_Baseline = TINY_MARGIN + TINY_TEXT_SIZE + TINY_LINE_THICKNESS + scaledTinySignatureMaxHeight + TINY_SPACING;
+
+                // 2. Draw Detainee Name (Right aligned)
+                const detaineeNameWidth = regularFont.widthOfTextAtSize(detaineeName, TINY_TEXT_SIZE);
+                const detaineeNameX = detaineeX_End - detaineeNameWidth;
+
+                page.drawText(detaineeName, {
+                    x: detaineeNameX, y: y_Name_Baseline, font: regularFont, size: TINY_TEXT_SIZE, color: rgb(0, 0, 0),
+                });
+
+                // 3. Draw Signature Line
+                const y_Signature_Line = TINY_MARGIN + TINY_LINE_THICKNESS;
+                const detaineeLineX_Start = detaineeX_End - TINY_SIGNATURE_WIDTH;
+
+                page.drawLine({
+                    start: { x: detaineeLineX_Start, y: y_Signature_Line },
+                    end: { x: detaineeX_End, y: y_Signature_Line },
+                    thickness: TINY_LINE_THICKNESS,
+                    color: rgb(0, 0, 0),
+                });
+
+                // 4. Draw Signature Image (Right aligned)
+                const detaineeSignatureAspectRatio = detaineeImage.width / detaineeImage.height;
+                let actualDetaineeSignatureHeight = scaledTinySignatureMaxHeight;
+                let actualDetaineeSignatureWidth = scaledTinySignatureMaxHeight * detaineeSignatureAspectRatio;
+
+                const detaineeImageX = detaineeX_End - actualDetaineeSignatureWidth;
+                const detaineeImageY = y_Signature_Line + TINY_LINE_THICKNESS + TINY_SPACING;
+
+                page.drawImage(detaineeImage, {
+                    x: detaineeImageX,
+                    y: detaineeImageY,
+                    width: actualDetaineeSignatureWidth,
+                    height: actualDetaineeSignatureHeight,
+                });
+            }
+        }
+
+        // Generate PDF Button Event Listener
+        generatePdfBtn.addEventListener('click', async () => {
+            if (!originalPdfBytes) {
+                showMessageBox('Please upload a PDF file first.');
+                return;
+            }
+
+            if (detaineeSignaturePad.isEmpty() || officerSignaturePad.isEmpty()) {
+                showMessageBox('Both signatures are required.');
+                return;
+            }
+
+            loadingOverlay.classList.remove('hidden');
+
+            try {
+                const { PDFDocument, rgb, StandardFonts } = PDFLib;
+                const existingPdfDoc = await PDFDocument.load(new Uint8Array(originalPdfBytes));
+
+                // --- FULL SIGNATURE CONSTANTS ---
+                const SCALE_FACTOR = 0.7; // 70% scale factor
+                const CM_TO_POINTS = 28.35; // ~1cm in PDF points (72dpi)
+                const VERTICAL_SHIFT = CM_TO_POINTS / 2; // Shift up by 0.5cm (relative to previous 1cm down position)
+                const applyShift = (y) => y - VERTICAL_SHIFT;
+
+                // Embed fonts
+                const timesRomanFont = await existingPdfDoc.embedFont(StandardFonts.TimesRoman);
+                const helveticaFont = await existingPdfDoc.embedFont(StandardFonts.Helvetica);
+                const regularFont = await existingPdfDoc.embedFont(StandardFonts.Helvetica);
+
+                // Get image and text data
+                const detaineeSignatureDataUrl = detaineeSignaturePad.toDataURL('image/png');
+                const officerSignatureDataUrl = officerSignaturePad.toDataURL('image/png');
+                const detaineeSignatureImage = await existingPdfDoc.embedPng(detaineeSignatureDataUrl);
+                const officerSignatureImage = await existingPdfDoc.embedPng(officerSignatureDataUrl);
+                const detaineeName = detaineeNameInput.value.trim();
+                const officerName = officerNameInput.value.trim();
+                const serviceId = serviceIdInput.value.trim();
+
+                const totalPages = existingPdfDoc.getPages().length;
+
+                // --- Word Replacement & Tiny Initials Logic ---
+                const pdfjsDoc = await pdfjsLib.getDocument({ data: originalPdfBytes }).promise;
+
+                for (let i = 0; i < totalPages; i++) {
+                    const page = existingPdfDoc.getPages()[i];
+                    const pageNumber = i + 1;
+                    const pdfjsPage = await pdfjsDoc.getPage(pageNumber);
+                    const { width, height } = page.getSize();
+
+                    // 1. --- Word Replacement on All Pages ---
+                    const textContent = await pdfjsPage.getTextContent();
+                    const pageTextItems = textContent.items;
+
+                    for (const textItem of pageTextItems) {
+                        for (const replacement of replacements) {
+                            if (textItem.str.toLowerCase().includes(replacement.find.toLowerCase())) {
+                                const size = textItem.transform[3];
+                                const x = textItem.transform[4];
+                                const y = textItem.transform[5];
+                                const yOffset = -2.5;
+                                const scaledSize = size * SCALE_FACTOR;
+
+                                const bgColor = await getBackgroundColor(pdfjsPage, x + (textItem.width / 2), y + (size / 2));
+                                const coverColor = rgb(bgColor.r / 255, bgColor.g / 255, bgColor.b / 255);
+
+                                const textWidth = helveticaFont.widthOfTextAtSize(textItem.str, size);
+                                const rectHeight = size + 2;
+
+                                // Draw a rectangle over the original text to erase it.
+                                page.drawRectangle({
+                                    x: x,
+                                    y: y + yOffset,
+                                    width: textWidth,
+                                    height: rectHeight,
+                                    color: coverColor,
+                                });
+
+                                // Draw the new text
+                                const newStr = textItem.str.replace(new RegExp(replacement.find, 'gi'), replacement.replace);
+                                page.drawText(newStr, {
+                                    x: x,
+                                    y: y + yOffset,
+                                    size: scaledSize,
+                                    font: timesRomanFont,
+                                    color: rgb(0, 0, 0),
+                                });
+                            }
+                        }
+                    } // End of Word Replacement
+
+                    // 2. --- Tiny Initials on Non-Last Pages ---
+                    if (totalPages > 1 && pageNumber < totalPages) {
+                        const embedDetails = {
+                            page: page,
+                            width: width,
+                            height: height,
+                            officerName: officerName,
+                            detaineeName: detaineeName,
+                            officerImage: officerSignatureImage,
+                            detaineeImage: detaineeSignatureImage,
+                            regularFont: regularFont
+                        };
+                        await drawTinyInitials(page, pageNumber, totalPages, embedDetails);
+                    }
+                }
+
+                // --- Full Signature Block Logic (Only on the Last Page) ---
+                const lastPage = existingPdfDoc.getPages()[totalPages - 1];
+                const { width, height } = lastPage.getSize();
+
+                // --- Scaled Dimensions (70% of previous values) ---
+                const signatureImageMaxHeight = 60;
+                const signatureAreaWidth = 200;
+                const gapBetweenAreas = 40;
+
+                const scaledSignatureImageMaxHeight = signatureImageMaxHeight * SCALE_FACTOR;
+                const scaledSignatureAreaWidth = signatureAreaWidth * SCALE_FACTOR;
+                const scaledGapBetweenAreas = gapBetweenAreas * SCALE_FACTOR;
+
+                // Scaled positioning constants (from bottom up)
+                const scaledBottomMargin = 30 * SCALE_FACTOR;
+                const scaledDateTextSize = 10 * SCALE_FACTOR;
+                const scaledNameTextSize = 12 * SCALE_FACTOR;
+                const scaledLabelFontSize = 12 * SCALE_FACTOR;
+                const scaledIndividualItemSpacing = 8 * SCALE_FACTOR;
+                const scaledBlockVerticalPadding = 20 * SCALE_FACTOR;
+                const scaledLineThickness = 1 * SCALE_FACTOR;
+
+                // Calculate total width of the two signature blocks + gap (using scaled values)
+                const totalContentWidth = (scaledSignatureAreaWidth * 2) + scaledGapBetweenAreas;
+
+                // Calculate X position to center the combined block (using scaled width)
+                const startX = (width / 2) - (totalContentWidth / 2);
+
+                // --- VERTICAL PLACEMENT AND ALIGNMENT LOGIC (using scaled dimensions) ---
+
+                // 1. Y for the signature line (Aligned bottom of signature boxes)
+                const AlignedSignatureLineY = scaledBottomMargin + scaledDateTextSize + scaledBlockVerticalPadding;
+
+                // 2. Y for the bottom of the signature image (sits right above the line)
+                const Y_Sig_Image_Bottom = AlignedSignatureLineY + scaledLineThickness + scaledIndividualItemSpacing;
+
+                // 3. Y for the top of the signature image
+                const Y_Sig_Image_Top = Y_Sig_Image_Bottom + scaledSignatureImageMaxHeight;
+
+                // 4. Y for the *baseline* of the aligned text value (Service ID and Officer Name)
+                const Y_Aligned_Value_Baseline = Y_Sig_Image_Top + scaledIndividualItemSpacing;
+
+                // 5. Y for the *baseline* of the aligned text label (Service ID Label and Officer Name Label)
+                const Y_Aligned_Label_Baseline = Y_Aligned_Value_Baseline + scaledNameTextSize + scaledIndividualItemSpacing;
+
+                // 6. Y for the *baseline* of the Detainee Name value (The highest text value, only on Detainee side)
+                const Y_Detainee_Name_Value_Baseline = Y_Aligned_Label_Baseline + scaledLabelFontSize + scaledIndividualItemSpacing;
+
+                // 7. Y for the *baseline* of the Detainee Name label (The highest element)
+                const Y_Detainee_Name_Label_Baseline = Y_Detainee_Name_Value_Baseline + scaledNameTextSize + scaledIndividualItemSpacing;
+
+                // --- Calculate X Coordinates (using scaled width) ---
+                const officerX = startX;
+                const detaineeX = startX + scaledSignatureAreaWidth + scaledGapBetweenAreas;
+
+                // ---  Officer (Left Side) ---
+
+                // Officer Name Label
+                if (officerName.length > 0) {
+                    lastPage.drawText('Officer Name:', {
+                        x: officerX, y: applyShift(Y_Aligned_Label_Baseline), font: regularFont, size: scaledLabelFontSize, color: rgb(0, 0, 0),
+                    });
+                }
+
+                // Officer Name Value
+                if (officerName.length > 0) {
+                    lastPage.drawText(officerName, {
+                        x: officerX, y: applyShift(Y_Aligned_Value_Baseline), font: regularFont, size: scaledNameTextSize, color: rgb(0, 0, 0),
+                    });
+                }
+
+                // Draw Officer Signature Image
+                const officerSignatureAspectRatio = officerSignatureImage.width / officerSignatureImage.height;
+                let actualOfficerSignatureHeight = scaledSignatureImageMaxHeight;
+                let actualOfficerSignatureWidth = scaledSignatureImageMaxHeight * officerSignatureAspectRatio;
+                if (actualOfficerSignatureWidth > scaledSignatureAreaWidth) {
+                    actualOfficerSignatureWidth = scaledSignatureAreaWidth;
+                    actualOfficerSignatureHeight = scaledSignatureAreaWidth / officerSignatureAspectRatio;
+                }
+                const officerImageX = officerX + (scaledSignatureAreaWidth / 2) - (actualOfficerSignatureWidth / 2);
+                lastPage.drawImage(officerSignatureImage, {
+                    x: officerImageX,
+                    y: applyShift(Y_Sig_Image_Bottom), // Apply shift
+                    width: actualOfficerSignatureWidth,
+                    height: actualOfficerSignatureHeight,
+                });
+
+                // Draw Officer Signature Line
+                lastPage.drawLine({
+                    start: { x: officerX, y: applyShift(AlignedSignatureLineY) },
+                    end: { x: officerX + scaledSignatureAreaWidth, y: applyShift(AlignedSignatureLineY) },
+                    thickness: scaledLineThickness,
+                    color: rgb(0, 0, 0),
+                });
+
+                // --- Detainee (Right Side) ---
+
+                // Detainee Name Label
+                if (detaineeName.length > 0) {
+                    lastPage.drawText('Detainee Name:', {
+                        x: detaineeX, y: applyShift(Y_Detainee_Name_Label_Baseline), font: regularFont, size: scaledLabelFontSize, color: rgb(0, 0, 0),
+                    });
+                }
+
+                // Detainee Name Value
+                if (detaineeName.length > 0) {
+                    lastPage.drawText(detaineeName, {
+                        x: detaineeX, y: applyShift(Y_Detainee_Name_Value_Baseline), font: regularFont, size: scaledNameTextSize, color: rgb(0, 0, 0),
+                    });
+                }
+
+                // Service ID Label
+                if (serviceId.length > 0) {
+                    lastPage.drawText('Service ID:', {
+                        x: detaineeX, y: applyShift(Y_Aligned_Label_Baseline), font: regularFont, size: scaledLabelFontSize, color: rgb(0, 0, 0),
+                    });
+                }
+
+                // Service ID Value
+                if (serviceId.length > 0) {
+                    lastPage.drawText(serviceId, {
+                        x: detaineeX, y: applyShift(Y_Aligned_Value_Baseline), font: regularFont, size: scaledNameTextSize, color: rgb(0, 0, 0),
+                    });
+                }
+
+                // Draw Detainee Signature Image
+                const detaineeSignatureAspectRatio = detaineeSignatureImage.width / detaineeSignatureImage.height;
+                let actualDetaineeSignatureHeight = scaledSignatureImageMaxHeight;
+                let actualDetaineeSignatureWidth = scaledSignatureImageMaxHeight * detaineeSignatureAspectRatio;
+                if (actualDetaineeSignatureWidth > scaledSignatureAreaWidth) {
+                    actualDetaineeSignatureWidth = scaledSignatureAreaWidth;
+                    actualDetaineeSignatureHeight = scaledSignatureAreaWidth / detaineeSignatureAspectRatio;
+                }
+                const detaineeImageX = detaineeX + (scaledSignatureAreaWidth / 2) - (actualDetaineeSignatureWidth / 2);
+                lastPage.drawImage(detaineeSignatureImage, {
+                    x: detaineeImageX,
+                    y: applyShift(Y_Sig_Image_Bottom), // Apply shift
+                    width: actualDetaineeSignatureWidth,
+                    height: actualDetaineeSignatureHeight,
+                });
+
+                // Draw Detainee Signature Line
+                lastPage.drawLine({
+                    start: { x: detaineeX, y: applyShift(AlignedSignatureLineY) },
+                    end: { x: detaineeX + scaledSignatureAreaWidth, y: applyShift(AlignedSignatureLineY) },
+                    thickness: scaledLineThickness,
+                    color: rgb(0, 0, 0),
+                });
+
+                // --- Date and Time (Centered below everything) ---
+                const dateTimeY = scaledBottomMargin;
+
+                const now = new Date();
+                const dateTimeString = `Date: ${now.toLocaleDateString()} Time: ${now.toLocaleTimeString()}`;
+                const dateTimeTextWidth = regularFont.widthOfTextAtSize(dateTimeString, scaledDateTextSize);
+                const dateTimeX = (width / 2) - (dateTimeTextWidth / 2);
+
+                lastPage.drawText(dateTimeString, {
+                    x: dateTimeX,
+                    y: applyShift(dateTimeY), // Apply shift
+                    font: regularFont,
+                    size: scaledDateTextSize, // Scaled font size
+                    color: rgb(0, 0, 0),
+                });
+
+                const pdfBytes = await existingPdfDoc.save();
+
+                const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'signed_document.pdf';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                showMessageBox('PDF generated successfully!');
+
+            } catch (error) {
+                console.error('Error generating PDF:', error);
+                showMessageBox('Failed to generate PDF. Please ensure all inputs are valid.');
+            } finally {
+                loadingOverlay.classList.add('hidden');
+            }
+        });
+
+        // --- Theme Toggle Logic ---
+        function applyTheme(isDarkMode) {
+            if (isDarkMode) {
+                document.body.classList.add('dark-mode');
+            } else {
+                document.body.classList.remove('dark-mode');
+            }
+        }
+
+        // Load theme preference from localStorage on page load
+        const savedTheme = localStorage.getItem('theme');
+        if (savedTheme === 'dark') {
+            themeToggle.checked = true;
+            applyTheme(true);
+        } else {
+            themeToggle.checked = false;
+            applyTheme(false);
+        }
+
+        // Event listener for theme toggle switch
+        themeToggle.addEventListener('change', () => {
+            const isDarkMode = themeToggle.checked;
+            applyTheme(isDarkMode);
+            localStorage.setItem('theme', isDarkMode ? 'dark' : 'light');
+        });
+
+        // Initial call to set first target and start animation when the page loads
+        window.addEventListener('load', () => {
+            // Wait for the SVG to potentially render and get its actual dimensions
+            // A small timeout ensures the browser has a chance to lay out the SVG
+            setTimeout(() => {
+                setRandomTarget(); // Get an initial target
+                currentX = targetX; // Initialize current position to target to avoid jump
+                currentY = targetY;
+                flyingDocument.style.left = `${currentX}px`;
+                flyingDocument.style.top = `${currentY}px`;
+                flyingDocument.style.transform = `rotate(${currentRotationAngle}deg)`; // Apply initial rotation
+
+                // Start animation
+                animateFlyingDocument();
+            }, 100); // 100ms delay
+        });
+
+    </script>
+</body>
+</html>
