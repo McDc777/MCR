@@ -1,0 +1,239 @@
+package com.mcr.pdfstudio.fonts
+
+import com.tom_roush.fontbox.ttf.TTFParser
+import com.tom_roush.fontbox.ttf.TrueTypeCollection
+import com.tom_roush.fontbox.ttf.TrueTypeFont
+import com.tom_roush.pdfbox.pdmodel.PDDocument
+import com.tom_roush.pdfbox.pdmodel.font.PDFont
+import com.tom_roush.pdfbox.pdmodel.font.PDType0Font
+import com.tom_roush.pdfbox.pdmodel.font.PDType1Font
+import java.io.File
+
+/** A font we can embed, discovered on the device. */
+data class FontEntry(
+    val label: String,
+    val file: File,
+    /** Set when [file] is a TrueType collection and we need one face out of it. */
+    val faceName: String? = null,
+)
+
+/**
+ * Locates fonts for arbitrary scripts.
+ *
+ * We deliberately embed the *device's* fonts rather than bundling our own: it
+ * keeps the APK small and it means CJK, Arabic, Indic and friends work with
+ * whatever coverage the phone already ships.
+ */
+object SystemFonts {
+
+    private const val DIR = "/system/fonts"
+
+    private val latinCandidates = listOf(
+        "Roboto-Regular.ttf", "NotoSans-Regular.ttf", "DroidSans.ttf",
+    )
+
+    /** Ordered best-first candidates per script bucket. */
+    private val scriptCandidates: Map<Script, List<String>> = mapOf(
+        Script.CJK to listOf(
+            "NotoSansCJK-Regular.ttc", "NotoSansCJKjp-Regular.otf",
+            "NotoSerifCJK-Regular.ttc", "DroidSansFallback.ttf",
+            "NotoSansSC-Regular.otf",
+        ),
+        Script.ARABIC to listOf(
+            "NotoNaskhArabic-Regular.ttf", "NotoNaskhArabicUI-Regular.ttf",
+            "NotoSansArabic-Regular.ttf", "DroidSansArabic.ttf",
+        ),
+        Script.HEBREW to listOf(
+            "NotoSansHebrew-Regular.ttf", "DroidSansHebrew-Regular.ttf",
+        ),
+        Script.DEVANAGARI to listOf(
+            "NotoSansDevanagari-Regular.ttf", "DroidSansDevanagari-Regular.ttf",
+        ),
+        Script.BENGALI to listOf("NotoSansBengali-Regular.ttf"),
+        Script.TAMIL to listOf("NotoSansTamil-Regular.ttf"),
+        Script.TELUGU to listOf("NotoSansTelugu-Regular.ttf"),
+        Script.KANNADA to listOf("NotoSansKannada-Regular.ttf"),
+        Script.MALAYALAM to listOf("NotoSansMalayalam-Regular.ttf"),
+        Script.GUJARATI to listOf("NotoSansGujarati-Regular.ttf"),
+        Script.GURMUKHI to listOf("NotoSansGurmukhi-Regular.ttf"),
+        Script.SINHALA to listOf("NotoSansSinhala-Regular.ttf"),
+        Script.THAI to listOf("NotoSansThai-Regular.ttf", "DroidSansThai.ttf"),
+        Script.LAO to listOf("NotoSansLao-Regular.ttf"),
+        Script.KHMER to listOf("NotoSansKhmer-Regular.ttf"),
+        Script.MYANMAR to listOf("NotoSansMyanmar-Regular.ttf"),
+        Script.ETHIOPIC to listOf("NotoSansEthiopic-Regular.ttf"),
+        Script.GEORGIAN to listOf("NotoSansGeorgian-Regular.ttf"),
+        Script.ARMENIAN to listOf("NotoSansArmenian-Regular.ttf"),
+        Script.HANGUL to listOf(
+            "NotoSansCJK-Regular.ttc", "NotoSansKR-Regular.otf",
+            "DroidSansFallback.ttf",
+        ),
+    )
+
+    /** Face names inside NotoSansCJK-Regular.ttc, by script. */
+    private val ttcFace: Map<Script, String> = mapOf(
+        Script.CJK to "NotoSansCJKjp-Regular",
+        Script.HANGUL to "NotoSansCJKkr-Regular",
+    )
+
+    enum class Script {
+        LATIN, CJK, HANGUL, ARABIC, HEBREW, DEVANAGARI, BENGALI, TAMIL, TELUGU,
+        KANNADA, MALAYALAM, GUJARATI, GURMUKHI, SINHALA, THAI, LAO, KHMER,
+        MYANMAR, ETHIOPIC, GEORGIAN, ARMENIAN,
+    }
+
+    fun scriptOf(text: String): Script {
+        val tally = HashMap<Script, Int>()
+        for (ch in text) {
+            val s = scriptOfChar(ch.code) ?: continue
+            tally[s] = (tally[s] ?: 0) + 1
+        }
+        // Non-Latin wins ties: a mostly-Latin string with CJK in it still needs
+        // a CJK-capable font to render at all.
+        val nonLatin = tally.filterKeys { it != Script.LATIN }
+        return nonLatin.maxByOrNull { it.value }?.key
+            ?: Script.LATIN
+    }
+
+    private fun scriptOfChar(cp: Int): Script? = when {
+        cp < 0x0370 -> if (cp > 0x20) Script.LATIN else null
+        cp in 0x0370..0x03FF -> Script.LATIN   // Greek: Noto/Roboto covers it
+        cp in 0x0400..0x04FF -> Script.LATIN   // Cyrillic: likewise
+        cp in 0x0530..0x058F -> Script.ARMENIAN
+        cp in 0x0590..0x05FF -> Script.HEBREW
+        cp in 0x0600..0x06FF -> Script.ARABIC
+        cp in 0x0750..0x077F -> Script.ARABIC
+        cp in 0x0900..0x097F -> Script.DEVANAGARI
+        cp in 0x0980..0x09FF -> Script.BENGALI
+        cp in 0x0A00..0x0A7F -> Script.GURMUKHI
+        cp in 0x0A80..0x0AFF -> Script.GUJARATI
+        cp in 0x0B80..0x0BFF -> Script.TAMIL
+        cp in 0x0C00..0x0C7F -> Script.TELUGU
+        cp in 0x0C80..0x0CFF -> Script.KANNADA
+        cp in 0x0D00..0x0D7F -> Script.MALAYALAM
+        cp in 0x0D80..0x0DFF -> Script.SINHALA
+        cp in 0x0E00..0x0E7F -> Script.THAI
+        cp in 0x0E80..0x0EFF -> Script.LAO
+        cp in 0x1000..0x109F -> Script.MYANMAR
+        cp in 0x10A0..0x10FF -> Script.GEORGIAN
+        cp in 0x1200..0x137F -> Script.ETHIOPIC
+        cp in 0x1780..0x17FF -> Script.KHMER
+        cp in 0x1100..0x11FF -> Script.HANGUL
+        cp in 0x3130..0x318F -> Script.HANGUL
+        cp in 0xAC00..0xD7AF -> Script.HANGUL
+        cp in 0x2E80..0x303F -> Script.CJK
+        cp in 0x3040..0x30FF -> Script.CJK
+        cp in 0x3400..0x4DBF -> Script.CJK
+        cp in 0x4E00..0x9FFF -> Script.CJK
+        cp in 0xF900..0xFAFF -> Script.CJK
+        cp in 0xFB50..0xFEFF -> Script.ARABIC
+        else -> null
+    }
+
+    fun entryFor(script: Script): FontEntry? {
+        val names = scriptCandidates[script] ?: latinCandidates
+        for (name in names) {
+            val f = File(DIR, name)
+            if (f.isFile) {
+                val face = if (name.endsWith(".ttc")) ttcFace[script] else null
+                return FontEntry(name.substringBeforeLast('.'), f, face)
+            }
+        }
+        return latinEntry()
+    }
+
+    fun latinEntry(): FontEntry? {
+        for (name in latinCandidates) {
+            val f = File(DIR, name)
+            if (f.isFile) return FontEntry(name.substringBeforeLast('.'), f)
+        }
+        // Last resort: any TTF at all.
+        val any = File(DIR).listFiles { f -> f.name.endsWith(".ttf") }
+            ?.sortedBy { it.name }
+            ?.firstOrNull()
+        return any?.let { FontEntry(it.name.substringBeforeLast('.'), it) }
+    }
+
+    /** Fonts offered in the "insert text" font picker. */
+    fun pickable(): List<FontEntry> {
+        val dir = File(DIR)
+        if (!dir.isDirectory) return emptyList()
+        return dir.listFiles { f ->
+            val n = f.name.lowercase()
+            (n.endsWith(".ttf") || n.endsWith(".ttc")) && !n.contains("emoji")
+        }
+            ?.sortedBy { it.name }
+            ?.map { FontEntry(it.name.substringBeforeLast('.'), it) }
+            .orEmpty()
+    }
+}
+
+/**
+ * Per-document font cache. Embedded subsets are tied to the [PDDocument] they
+ * were loaded into, so this must not outlive the document.
+ */
+class FontBook(private val doc: PDDocument) {
+
+    private val cache = HashMap<String, PDFont>()
+
+    /** Picks and embeds a font that can actually draw [text]. */
+    fun forText(text: String): PDFont {
+        val script = SystemFonts.scriptOf(text)
+        val entry = SystemFonts.entryFor(script)
+        return entry?.let { load(it) } ?: fallback()
+    }
+
+    fun load(entry: FontEntry): PDFont {
+        val key = entry.file.absolutePath + "#" + entry.faceName
+        cache[key]?.let { return it }
+
+        val loaded = runCatching {
+            if (entry.file.name.endsWith(".ttc", ignoreCase = true)) {
+                loadFromCollection(entry)
+            } else {
+                PDType0Font.load(doc, entry.file)
+            }
+        }.getOrElse { fallback() }
+
+        cache[key] = loaded
+        return loaded
+    }
+
+    private fun loadFromCollection(entry: FontEntry): PDFont {
+        val collection = TrueTypeCollection(entry.file)
+        var chosen: TrueTypeFont? = null
+        if (entry.faceName != null) {
+            chosen = runCatching { collection.getFontByName(entry.faceName) }.getOrNull()
+        }
+        if (chosen == null) {
+            // Take the first face in the collection.
+            collection.processAllFonts { font -> if (chosen == null) chosen = font }
+        }
+        val ttf = chosen ?: error("empty collection ${entry.file}")
+        return PDType0Font.load(doc, ttf, true)
+    }
+
+    /**
+     * Standard-14 Helvetica. Latin-1 only, but it needs no embedding, which
+     * makes it the safe answer when nothing else loads.
+     */
+    fun fallback(): PDFont = PDType1Font.HELVETICA
+
+    /** True when [font] cannot encode [text] and drawing would throw. */
+    fun canEncode(font: PDFont, text: String): Boolean = runCatching {
+        font.getStringWidth(text)
+        true
+    }.getOrElse { false }
+
+    /**
+     * Returns a font guaranteed to encode [text], degrading to a script-matched
+     * embedded font and finally to stripping unsupported characters.
+     */
+    fun safeFontFor(text: String): PDFont {
+        val preferred = forText(text)
+        if (canEncode(preferred, text)) return preferred
+        val latin = SystemFonts.latinEntry()?.let { load(it) }
+        if (latin != null && canEncode(latin, text)) return latin
+        return fallback()
+    }
+}
