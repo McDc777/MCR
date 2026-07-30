@@ -102,28 +102,32 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     // Preferences mirrored as Compose state — SharedPreferences is not
     // observable, so reading it during composition would never recompose.
-    var darkMode by mutableStateOf(prefs.darkMode)
-        private set
-    var invertPages by mutableStateOf(prefs.invertPages)
-        private set
+    // Explicit backing state rather than `by mutableStateOf`, so assigning also
+    // writes the preference through.
+    private val darkModeState = mutableStateOf(prefs.darkMode)
+    var darkMode: Boolean
+        get() = darkModeState.value
+        set(value) {
+            darkModeState.value = value
+            prefs.darkMode = value
+        }
+
+    private val invertPagesState = mutableStateOf(prefs.invertPages)
+    var invertPages: Boolean
+        get() = invertPagesState.value
+        set(value) {
+            invertPagesState.value = value
+            prefs.invertPages = value
+            // Rendered pages are keyed by revision, so bump it to force a redraw.
+            docRevision++
+        }
+
     var aiKeySet by mutableStateOf(prefs.hasAiKey)
         private set
     var aiModel by mutableStateOf(prefs.aiModel)
         private set
 
-    fun setDarkMode(value: Boolean) {
-        darkMode = value
-        prefs.darkMode = value
-    }
-
-    fun setInvertPages(value: Boolean) {
-        invertPages = value
-        prefs.invertPages = value
-        // Rendered pages are cached by revision, so bump it to force a redraw.
-        docRevision++
-    }
-
-    fun setAiCredentials(key: String, model: String) {
+    fun applyAiCredentials(key: String, model: String) {
         prefs.aiApiKey = key
         prefs.aiModel = model
         aiKeySet = prefs.hasAiKey

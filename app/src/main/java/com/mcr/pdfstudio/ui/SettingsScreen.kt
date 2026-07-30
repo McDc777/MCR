@@ -83,12 +83,12 @@ fun SettingsScreen(vm: EditorViewModel, onBack: () -> Unit) {
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         Button(onClick = {
-                            vm.setAiCredentials(key, model)
+                            vm.applyAiCredentials(key, model)
                             vm.message = "Saved"
                         }) { Text("Save") }
                         OutlinedButton(onClick = {
                             key = ""
-                            vm.setAiCredentials("", model)
+                            vm.applyAiCredentials("", model)
                             vm.message = "Key removed"
                         }) { Text("Remove key") }
                     }
@@ -100,14 +100,14 @@ fun SettingsScreen(vm: EditorViewModel, onBack: () -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Switch(
                             checked = vm.darkMode,
-                            onCheckedChange = { vm.setDarkMode(it) }
+                            onCheckedChange = { vm.darkMode = it }
                         )
                         Text("Dark theme", modifier = Modifier.padding(start = 10.dp))
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Switch(
                             checked = vm.invertPages,
-                            onCheckedChange = { vm.setInvertPages(it) }
+                            onCheckedChange = { vm.invertPages = it }
                         )
                         Text("Night mode pages", modifier = Modifier.padding(start = 10.dp))
                     }
