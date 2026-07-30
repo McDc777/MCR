@@ -15,6 +15,14 @@ android {
         versionCode = 1
         versionName = "1.0"
         vectorDrawables.useSupportLibrary = true
+
+        ndk {
+            // The bundled OCR model ships one native library per ABI and is by
+            // far the largest thing in the APK. Phones are ARM; x86_64 keeps
+            // emulators and Chromebooks working. Dropping 32-bit x86 — which no
+            // current device uses — saves around 11 MB.
+            abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
     }
 
     signingConfigs {
