@@ -136,7 +136,9 @@ object FormOps {
                     }
                 }
 
-                is PDChoice -> field.value = value
+                // PDChoice also exposes setValue(List<String>), so call the
+                // single-value overload explicitly.
+                is PDChoice -> field.setValue(value)
                 is PDTextField -> field.value = value
                 is PDPushButton -> return false
                 else -> field.setValue(value)
@@ -190,7 +192,7 @@ object FormOps {
                     is PDCheckBox -> field.unCheck()
                     is PDRadioButton -> field.value = "Off"
                     is PDTextField -> field.value = ""
-                    is PDChoice -> field.value = ""
+                    is PDChoice -> field.setValue("")
                     else -> Unit
                 }
             }

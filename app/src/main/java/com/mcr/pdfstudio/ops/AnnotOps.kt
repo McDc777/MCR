@@ -323,7 +323,6 @@ object AnnotOps {
         note.contents = contents
         note.titlePopup = author
         note.name = PDAnnotationText.NAME_NOTE
-        note.isOpen = false
         note.color = rgb(color)
         note.rectangle = PDRectangle(x, y, 22f, 22f)
         page.annotations.add(note)
