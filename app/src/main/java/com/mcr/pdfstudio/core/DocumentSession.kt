@@ -82,11 +82,21 @@ class DocumentSession private constructor(
      */
     fun <T> mutate(block: (PDDocument) -> T): T {
         pushUndoSnapshot()
+        // The renderer holds an open descriptor on the work file; release it
+        // before the bytes underneath it change.
+        closeRasterizer()
+
+        val staging = stagingFile()
         val result = load().use { doc ->
             val value = block(doc)
-            doc.save(workFile)
+            // Never save over the file the document is still reading from —
+            // PdfBox resolves objects lazily during save, and writing into its
+            // own source can produce a corrupt file.
+            doc.save(staging)
             value
         }
+        commit(staging)
+
         isDirty = true
         refreshRasterizer()
         return result
@@ -98,16 +108,31 @@ class DocumentSession private constructor(
      */
     fun replaceWith(replacement: PDDocument) {
         pushUndoSnapshot()
-        replacement.save(workFile)
+        closeRasterizer()
+        val staging = stagingFile()
+        replacement.save(staging)
+        commit(staging)
         isDirty = true
         refreshRasterizer()
     }
 
     fun replaceWithFile(file: File) {
         pushUndoSnapshot()
+        closeRasterizer()
         file.copyTo(workFile, overwrite = true)
         isDirty = true
         refreshRasterizer()
+    }
+
+    private fun stagingFile(): File = File(workFile.parentFile, workFile.name + ".staging")
+
+    /** Moves a freshly written document into place. */
+    private fun commit(staging: File) {
+        if (!staging.isFile) error("Save produced no output")
+        if (!staging.renameTo(workFile)) {
+            staging.copyTo(workFile, overwrite = true)
+            staging.delete()
+        }
     }
 
     private fun load(): PDDocument =
@@ -138,6 +163,7 @@ class DocumentSession private constructor(
 
     fun undo(): Boolean {
         val previous = undoStack.removeLastOrNull() ?: return false
+        closeRasterizer()
         val current = snapshotFile("redo")
         runCatching { workFile.copyTo(current, overwrite = true) }
             .onSuccess { redoStack.addLast(current) }
@@ -150,6 +176,7 @@ class DocumentSession private constructor(
 
     fun redo(): Boolean {
         val next = redoStack.removeLastOrNull() ?: return false
+        closeRasterizer()
         val current = snapshotFile("undo")
         runCatching { workFile.copyTo(current, overwrite = true) }
             .onSuccess { undoStack.addLast(current) }
@@ -211,8 +238,13 @@ class DocumentSession private constructor(
 
     // ----------------------------------------------------------------- render
 
-    private fun refreshRasterizer() {
+    private fun closeRasterizer() {
         rasterizer?.close()
+        rasterizer = null
+    }
+
+    private fun refreshRasterizer() {
+        closeRasterizer()
         rasterizer = PdfRasterizer.openOrNull(workFile)
         pageCount = rasterizer?.pageCount
             ?: runCatching { read { it.numberOfPages } }.getOrDefault(0)
