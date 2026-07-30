@@ -269,7 +269,7 @@ private fun InsertTextDialog(onInsert: (TextDraw) -> Unit, onDismiss: () -> Unit
                 }
                 LabeledSlider("Size ${size.toInt()}pt", size, 6f..72f, { size = it })
                 Text("Colour", style = MaterialTheme.typography.labelLarge)
-                SwatchRow(SWATCHES, color) { color = it }
+                SwatchRow(SWATCHES, color, onSelect = { color = it })
                 Text(
                     "Y is measured from the bottom of the page, the way PDF " +
                         "does it. Any language works — the right font is picked " +

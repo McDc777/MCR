@@ -30,6 +30,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -76,8 +77,9 @@ fun MarkupScreen(
     var width by remember { mutableStateOf(3f) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
-    // Freehand paths, in canvas pixels.
-    val paths = remember(vm.docRevision) { mutableStateListOf<MutableList<Offset>>() }
+    // Freehand paths, in canvas pixels. The inner lists are snapshot-backed too,
+    // otherwise appending a point mid-drag would not redraw the preview.
+    val paths = remember(vm.docRevision) { mutableStateListOf<SnapshotStateList<Offset>>() }
     var dragStart by remember { mutableStateOf<Offset?>(null) }
     var dragEnd by remember { mutableStateOf<Offset?>(null) }
     var notePoint by remember { mutableStateOf<Offset?>(null) }
@@ -242,22 +244,20 @@ fun MarkupScreen(
                             ) {
                                 detectDragGestures(
                                     onDragStart = { offset ->
-                                        paths.add(mutableListOf(offset))
-                                    },
-                                    onDrag = { change, _ ->
-                                        paths.lastOrNull()?.add(change.position)
+                                        paths.add(mutableStateListOf(offset))
                                     }
-                                ) { }
+                                ) { change, _ ->
+                                    paths.lastOrNull()?.add(change.position)
+                                }
                             } else {
                                 detectDragGestures(
                                     onDragStart = { offset ->
                                         dragStart = offset
                                         dragEnd = offset
-                                    },
-                                    onDrag = { change, _ ->
-                                        dragEnd = change.position
                                     }
-                                ) { }
+                                ) { change, _ ->
+                                    dragEnd = change.position
+                                }
                             }
                         }
                 ) {

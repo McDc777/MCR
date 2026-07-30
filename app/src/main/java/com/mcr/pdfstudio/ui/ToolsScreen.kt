@@ -163,7 +163,7 @@ private fun WatermarkSection(vm: EditorViewModel) {
             )
             LabeledSlider("Angle ${angle.toInt()}°", angle, 0f..90f, { angle = it })
             LabeledSlider("Size ${size.toInt()}pt", size, 12f..160f, { size = it })
-            SwatchRow(SWATCHES, color) { color = it }
+            SwatchRow(SWATCHES, color, onSelect = { color = it })
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Switch(checked = behind, onCheckedChange = { behind = it })
                 Text("Behind the content", modifier = Modifier.padding(start = 10.dp))
