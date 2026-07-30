@@ -45,7 +45,28 @@ jobs:
           echo "MCR_KEY_PASSWORD=sideload" >> "$GITHUB_ENV"
 
       - name: Build release APK
-        run: ./gradlew --no-daemon :app:assembleRelease
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:assembleRelease 2>&1 \
+            | tee "$RUNNER_TEMP/build.log"
+
+      # Publishes the compiler diagnostics as an annotated tag, so failures can
+      # be read with `git fetch` instead of trawling the Actions log UI.
+      - name: Report build failure
+        if: failure()
+        run: |
+          set +e
+          {
+            echo "Build failed for ${GITHUB_SHA:0:7}"
+            echo
+            grep -E "^e: |^w: warning: |error:" "$RUNNER_TEMP/build.log" | head -60
+            echo
+            sed -n '/What went wrong/,/^\* Try/p' "$RUNNER_TEMP/build.log" | head -30
+          } > "$RUNNER_TEMP/diag.txt"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git tag -f -a ci-status -F "$RUNNER_TEMP/diag.txt"
+          git push -f origin refs/tags/ci-status
 
       - name: Stage APK
         id: stage
@@ -84,14 +105,14 @@ jobs:
           NOTES="Sideload build of MCR PDF Studio from commit ${GITHUB_SHA:0:7}.
 
           Install on Android: download the APK below, tap it, and allow
-          installation from your browser/file manager when prompted.
+          installation from your browser or file manager when prompted.
 
           Note: each CI build is signed with a freshly generated sideload key,
           so if Android refuses to install over an older build, uninstall the
           previous version first."
 
-          # Recreate rather than update, so the `latest` tag always points at
-          # the commit that produced the APK and no stale asset survives.
+          # Recreate rather than update, so the tag always points at the commit
+          # that produced the APK and no stale asset survives.
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release delete "$TAG" --yes --cleanup-tag
           fi
@@ -100,3 +121,12 @@ jobs:
             --title "MCR PDF Studio (latest)" \
             --notes "$NOTES" \
             --prerelease
+
+      - name: Report build success
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          echo "Build OK for ${GITHUB_SHA:0:7}" > "$RUNNER_TEMP/ok.txt"
+          git tag -f -a ci-status -F "$RUNNER_TEMP/ok.txt"
+          git push -f origin refs/tags/ci-status
