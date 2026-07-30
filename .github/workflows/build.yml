@@ -90,12 +90,13 @@ jobs:
           so if Android refuses to install over an older build, uninstall the
           previous version first."
 
+          # Recreate rather than update, so the `latest` tag always points at
+          # the commit that produced the APK and no stale asset survives.
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "${{ steps.stage.outputs.apk }}" --clobber
-            gh release edit "$TAG" --notes "$NOTES" --prerelease
-          else
-            gh release create "$TAG" "${{ steps.stage.outputs.apk }}" \
-              --title "MCR PDF Studio (latest)" \
-              --notes "$NOTES" \
-              --prerelease
+            gh release delete "$TAG" --yes --cleanup-tag
           fi
+          gh release create "$TAG" "${{ steps.stage.outputs.apk }}" \
+            --target "$GITHUB_SHA" \
+            --title "MCR PDF Studio (latest)" \
+            --notes "$NOTES" \
+            --prerelease
