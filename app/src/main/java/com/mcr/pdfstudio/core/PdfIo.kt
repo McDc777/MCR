@@ -72,7 +72,10 @@ object PdfIo {
 
     fun sanitize(name: String): String {
         val cleaned = name.replace(Regex("[^A-Za-z0-9._\\-() ]"), "_").trim()
-        return if (cleaned.isEmpty()) "document" else cleaned.take(120)
+        // Illegal characters become underscores, so a name made entirely of
+        // them is never empty — it is just useless. Treat that as no name.
+        val meaningless = cleaned.all { it == '_' || it == '.' || it == ' ' || it == '-' }
+        return if (cleaned.isEmpty() || meaningless) "document" else cleaned.take(120)
     }
 
     fun baseName(name: String): String =
