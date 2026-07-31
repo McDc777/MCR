@@ -17,3 +17,9 @@
 
 # Keep Kotlin metadata used by Compose tooling.
 -keepattributes *Annotation*, InnerClasses, Signature, Exceptions
+
+# Tesseract's native bridge is reached by JNI, so the Java side must survive.
+-keep class com.googlecode.tesseract.android.** { *; }
+-keep class com.googlecode.leptonica.android.** { *; }
+-dontwarn com.googlecode.tesseract.android.**
+-dontwarn com.googlecode.leptonica.android.**

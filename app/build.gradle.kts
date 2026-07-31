@@ -115,5 +115,9 @@ dependencies {
     implementation(libs.mlkit.text.recognition.japanese)
     implementation(libs.mlkit.text.recognition.korean)
 
+    // ML Kit has no Arabic-script model, so Persian and Arabic go through
+    // Tesseract's LSTM engine instead.
+    implementation(libs.tesseract4android)
+
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.2")
 }

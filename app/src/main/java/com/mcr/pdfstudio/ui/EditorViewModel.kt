@@ -656,7 +656,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     fun runOcrCurrentPage(script: OcrScript = OcrScript.AUTO) = work("Reading page…") {
         val active = session ?: return@work
-        val result = OcrOps.recognizePage(active.workFile, currentPage, script)
+        val result = OcrOps.recognizePage(getApplication(), active.workFile, currentPage, script)
         if (result.lines.isEmpty()) {
             message = "No text recognised on this page."
             return@work
@@ -668,7 +668,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     fun runOcrAllPages(script: OcrScript = OcrScript.AUTO) = work("Reading all pages…") {
         val active = session ?: return@work
-        val results = OcrOps.recognizeAll(active.workFile, null, script)
+        val results = OcrOps.recognizeAll(getApplication(), active.workFile, null, script)
         val lines = results.sumOf { it.lines.size }
         if (lines == 0) {
             message = "No text recognised."

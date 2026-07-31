@@ -124,6 +124,35 @@ jobs:
             exit 1
           fi
 
+      # Tesseract language data for the Arabic-script languages ML Kit does not
+      # cover. These are the LSTM models, which is why they need Tesseract 4.
+      - name: Fetch OCR language data
+        run: |
+          set -uo pipefail
+          DEST=app/src/main/assets/tessdata
+          mkdir -p "$DEST"
+
+          ok=0; missing=""
+          for lang in fas ara; do
+            file="$lang.traineddata"
+            std="https://raw.githubusercontent.com/tesseract-ocr/tessdata/main/$file"
+            best="https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/main/$file"
+            if curl -fsSL --retry 3 --max-time 300 -o "$DEST/$file" "$std" \
+              || curl -fsSL --retry 3 --max-time 300 -o "$DEST/$file" "$best"; then
+              ok=$((ok + 1))
+              echo "  fetched $file ($(du -h "$DEST/$file" | cut -f1))"
+            else
+              rm -f "$DEST/$file"
+              missing="$missing $file"
+            fi
+          done
+
+          [ -n "$missing" ] && echo "Unavailable:$missing"
+          if [ "$ok" -eq 0 ]; then
+            echo "No OCR language data could be fetched" >&2
+            exit 1
+          fi
+
       - name: Build release APK
         run: |
           set -o pipefail

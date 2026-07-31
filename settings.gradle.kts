@@ -11,6 +11,9 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Tesseract4Android (LSTM OCR, used for Arabic-script languages) is
+        // only published here.
+        maven { url = uri("https://jitpack.io") }
     }
 }
 

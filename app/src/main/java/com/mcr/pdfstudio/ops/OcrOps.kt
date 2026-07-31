@@ -1,5 +1,6 @@
 package com.mcr.pdfstudio.ops
 
+import android.content.Context
 import android.graphics.Bitmap
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
@@ -39,15 +40,19 @@ data class OcrPageResult(val pageIndex: Int, val lines: List<OcrLine>) {
  * whichever reads the page most convincingly, which is what you want when you
  * do not know in advance what language a scan is in.
  */
-enum class OcrScript(val label: String) {
+enum class OcrScript(val label: String, val tessLanguage: String? = null) {
     AUTO("Detect automatically"),
     LATIN("Latin — European, Turkish, Vietnamese…"),
     CHINESE("Chinese"),
     JAPANESE("Japanese"),
     KOREAN("Korean"),
-    DEVANAGARI("Devanagari — Hindi, Marathi, Nepali…");
+    DEVANAGARI("Devanagari — Hindi, Marathi, Nepali…"),
+    PERSIAN("Persian / Farsi — فارسی", "fas"),
+    ARABIC("Arabic — العربية", "ara");
 
-    fun recognizer(): TextRecognizer = when (this) {
+    /** Null for scripts handled by Tesseract rather than ML Kit. */
+    fun recognizer(): TextRecognizer? = when (this) {
+        PERSIAN, ARABIC -> null
         CHINESE -> TextRecognition.getClient(
             ChineseTextRecognizerOptions.Builder().build()
         )
@@ -64,8 +69,11 @@ enum class OcrScript(val label: String) {
     }
 
     companion object {
-        /** The concrete models AUTO sweeps through. */
+        /** ML Kit models AUTO sweeps through first — these are fast. */
         val CONCRETE = listOf(LATIN, CHINESE, JAPANESE, KOREAN, DEVANAGARI)
+
+        /** Tesseract models AUTO only reaches for when ML Kit finds little. */
+        val RIGHT_TO_LEFT = listOf(PERSIAN, ARABIC)
     }
 }
 
@@ -82,6 +90,7 @@ object OcrOps {
     private const val OCR_DPI = 220
 
     fun recognizePage(
+        context: Context,
         pdf: File,
         pageIndex: Int,
         script: OcrScript = OcrScript.AUTO,
@@ -97,7 +106,9 @@ object OcrOps {
             try {
                 return OcrPageResult(
                     pageIndex,
-                    recognizeBitmap(bitmap, widthPt.toFloat(), heightPt.toFloat(), script)
+                    recognizeBitmap(
+                        context, bitmap, widthPt.toFloat(), heightPt.toFloat(), script
+                    )
                 )
             } finally {
                 bitmap.recycle()
@@ -106,6 +117,7 @@ object OcrOps {
     }
 
     fun recognizeAll(
+        context: Context,
         pdf: File,
         pages: List<Int>? = null,
         script: OcrScript = OcrScript.AUTO,
@@ -123,7 +135,8 @@ object OcrOps {
                         OcrPageResult(
                             index,
                             recognizeBitmap(
-                                bitmap, widthPt.toFloat(), heightPt.toFloat(), script
+                                context, bitmap, widthPt.toFloat(),
+                                heightPt.toFloat(), script
                             )
                         )
                     )
@@ -142,33 +155,59 @@ object OcrOps {
      * thread.
      */
     private fun recognizeBitmap(
+        context: Context,
         bitmap: Bitmap,
         pageWidthPt: Float,
         pageHeightPt: Float,
         script: OcrScript,
     ): List<OcrLine> {
-        val image = InputImage.fromBitmap(bitmap, 0)
         val scaleX = pageWidthPt / bitmap.width
         val scaleY = pageHeightPt / bitmap.height
 
-        if (script != OcrScript.AUTO) {
-            return runModel(script, image, pageHeightPt, scaleX, scaleY)
-        }
+        fun run(candidate: OcrScript): List<OcrLine> =
+            candidate.tessLanguage?.let { language ->
+                TesseractEngine.recognize(
+                    context, bitmap, language, pageHeightPt, scaleX, scaleY
+                )
+            } ?: runModel(
+                candidate, InputImage.fromBitmap(bitmap, 0), pageHeightPt, scaleX, scaleY
+            )
 
-        // Every model will return *something*; the one that actually matches the
-        // page returns markedly more text, so score by recognised characters.
+        if (script != OcrScript.AUTO) return run(script)
+
+        fun score(lines: List<OcrLine>) =
+            lines.sumOf { line -> line.text.count { !it.isWhitespace() } }
+
+        // Every model returns *something*; the one that matches the page returns
+        // markedly more text, so score by recognised characters.
         var best: List<OcrLine> = emptyList()
         var bestScore = 0
         for (candidate in OcrScript.CONCRETE) {
-            val lines = runModel(candidate, image, pageHeightPt, scaleX, scaleY)
-            val score = lines.sumOf { line -> line.text.count { !it.isWhitespace() } }
-            if (score > bestScore) {
-                bestScore = score
+            val lines = run(candidate)
+            val points = score(lines)
+            if (points > bestScore) {
+                bestScore = points
                 best = lines
+            }
+        }
+
+        // Arabic-script pages read as near-empty to every ML Kit model, so a
+        // very thin result is the signal to spend time on Tesseract.
+        if (bestScore < RTL_PROBE_THRESHOLD) {
+            for (candidate in OcrScript.RIGHT_TO_LEFT) {
+                val lines = run(candidate)
+                val points = score(lines)
+                if (points > bestScore) {
+                    bestScore = points
+                    best = lines
+                }
             }
         }
         return best
     }
+
+    /** Below this many recognised characters, a page is treated as unread. */
+    private const val RTL_PROBE_THRESHOLD = 24
 
     private fun runModel(
         script: OcrScript,
@@ -177,7 +216,7 @@ object OcrOps {
         scaleX: Float,
         scaleY: Float,
     ): List<OcrLine> {
-        val recognizer = script.recognizer()
+        val recognizer = script.recognizer() ?: return emptyList()
         return try {
             val result = Tasks.await(recognizer.process(image))
             buildList {
@@ -225,8 +264,11 @@ object OcrOps {
 
                 for (line in result.lines) {
                     val font = fonts.safeFontFor(line.text)
-                    val visual = TextShaping.sanitizeFor(font, TextShaping.toVisual(line.text))
-                        ?: continue
+                    // Deliberately *not* shaped or bidi-reordered. This layer is
+                    // invisible, so glyph forms are irrelevant, and writing the
+                    // logical text keeps copy and search returning ordinary
+                    // characters rather than Arabic presentation forms.
+                    val visual = TextShaping.sanitizeFor(font, line.text) ?: continue
                     // Size the glyphs to the detected box height, then stretch
                     // horizontally so the run spans the detected width.
                     val fontSize = line.height.coerceIn(4f, 96f) * 0.82f
