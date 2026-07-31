@@ -48,6 +48,27 @@ phone itself, tap it, and allow installation when Android asks.
 **Scans**
 - On-device OCR that writes recognised words back as an invisible text layer,
   so the page looks identical but becomes searchable and selectable
+- Five bundled recognition models — Latin, Chinese, Japanese, Korean and
+  Devanagari — plus an automatic mode that runs them all and keeps whichever
+  reads the page best. All offline; nothing is downloaded on first use.
+
+**Document structure**
+- Bookmarks: read the outline, jump to any entry, add your own, or generate
+  one entry per page
+- Embedded file attachments: list, attach, extract
+- Imposition at 1/2/4/6/9/16 pages per sheet — which doubles as a true resize,
+  since every page is scaled onto its slot
+- Reversible cropping (moves the crop box, deletes nothing)
+- Headers and footers in six slots with `{n}`, `{total}`, `{bates}`, `{date}`
+  and `{title}`, including Bates numbering for legal and audit work
+- Shrink a document by downsampling oversized images, leaving text and vector
+  content untouched
+
+**On the phone**
+- Print through Android, so real printers and "Save as PDF" both work
+- Read the page aloud, choosing the voice language from the page's own script
+- Signature pad: draw once, then tap anywhere to place it — stored as a
+  trimmed transparent PNG and reusable across documents
 
 **Security and metadata**
 - AES-256 passwords with per-operation permissions, or strip protection
@@ -61,7 +82,10 @@ phone itself, tap it, and allow installation when Android asks.
   only to `api.anthropic.com`. No key, no AI — everything else works offline.
 
 **Any language**
-- Text you type is drawn with fonts already on the phone, chosen per script:
+- 25 Noto font families ship inside the APK and are unpacked on first run, so
+  scripts render correctly even on devices with a thin font set; the device's
+  own fonts remain the fallback
+- Fonts are chosen per script automatically:
   CJK, Arabic, Hebrew, Devanagari, Bengali, Tamil, Telugu, Kannada, Malayalam,
   Gujarati, Gurmukhi, Sinhala, Thai, Lao, Khmer, Myanmar, Ethiopic, Georgian,
   Armenian, Cyrillic, Greek and Latin
@@ -105,6 +129,14 @@ CI builds every push and republishes the `latest` release. Each CI build is
 signed with a freshly generated sideload key, so if Android refuses to install
 over an older build, uninstall the previous version first.
 
+The APK is deliberately a single universal build with every ABI, all five OCR
+models and all bundled fonts — around 54 MB. Nothing is fetched at first run,
+so everything works with no network and no Play Services.
+
+Build outcomes are published as an annotated `ci-status` tag, so failures can
+be read with `git fetch origin refs/tags/ci-status && git cat-file tag ci-status`
+rather than opening the Actions UI.
+
 ## Honest limits
 
 - **Text does not reflow.** Replacing a word with a longer one takes more
@@ -115,7 +147,10 @@ over an older build, uninstall the previous version first.
   encode the new characters. Subsetted fonts frequently cannot — a font
   embedded with only the glyphs for "Invoice" has no `z` to give you — and then
   the closest font on the device is substituted.
-- **OCR covers Latin script.** Recognition uses ML Kit's bundled Latin model.
+- **OCR covers five scripts.** Latin, Chinese, Japanese, Korean and Devanagari
+  are bundled. Arabic, Thai and Hebrew have no on-device model available.
+- **CJK text you type uses the device's font.** The bundled set covers 25
+  scripts, but CJK fonts are tens of megabytes and ship with the OS anyway.
 - **Complex-script shaping is simplified.** Arabic joining and bidi reordering
   are implemented; full Indic reordering and rare ligatures are not.
 - **Encrypted documents need their password** to be opened at all, which is
