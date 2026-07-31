@@ -547,6 +547,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
     private fun localeFor(text: String): java.util.Locale =
         when (SystemFonts.scriptOf(text)) {
             SystemFonts.Script.CJK -> java.util.Locale.CHINESE
+            SystemFonts.Script.JAPANESE -> java.util.Locale.JAPANESE
             SystemFonts.Script.HANGUL -> java.util.Locale.KOREAN
             SystemFonts.Script.ARABIC -> java.util.Locale("ar")
             SystemFonts.Script.HEBREW -> java.util.Locale("he")

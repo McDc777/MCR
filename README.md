@@ -82,9 +82,15 @@ phone itself, tap it, and allow installation when Android asks.
   only to `api.anthropic.com`. No key, no AI — everything else works offline.
 
 **Any language**
-- 25 Noto font families ship inside the APK and are unpacked on first run, so
+- 30 Noto font families ship inside the APK and are unpacked on first run, so
   scripts render correctly even on devices with a thin font set; the device's
   own fonts remain the fallback
+- CJK is bundled too — Simplified Chinese, Traditional Chinese, Hong Kong,
+  Japanese and Korean. These are the TrueType builds on purpose: the
+  `.ttc` Android itself ships is CFF-based OpenType, which PdfBox cannot embed
+  as a Type 0 font, so relying on the device font would silently drop CJK text
+- Japanese is distinguished from Chinese by the presence of kana, so text gets
+  the right glyph forms rather than merely legible ones
 - Fonts are chosen per script automatically:
   CJK, Arabic, Hebrew, Devanagari, Bengali, Tamil, Telugu, Kannada, Malayalam,
   Gujarati, Gurmukhi, Sinhala, Thai, Lao, Khmer, Myanmar, Ethiopic, Georgian,
@@ -130,7 +136,7 @@ signed with a freshly generated sideload key, so if Android refuses to install
 over an older build, uninstall the previous version first.
 
 The APK is deliberately a single universal build with every ABI, all five OCR
-models and all bundled fonts — around 54 MB. Nothing is fetched at first run,
+models and all bundled fonts — around 90 MB. Nothing is fetched at first run,
 so everything works with no network and no Play Services.
 
 Build outcomes are published as an annotated `ci-status` tag, so failures can
@@ -149,8 +155,6 @@ rather than opening the Actions UI.
   the closest font on the device is substituted.
 - **OCR covers five scripts.** Latin, Chinese, Japanese, Korean and Devanagari
   are bundled. Arabic, Thai and Hebrew have no on-device model available.
-- **CJK text you type uses the device's font.** The bundled set covers 25
-  scripts, but CJK fonts are tens of megabytes and ship with the OS anyway.
 - **Complex-script shaping is simplified.** Arabic joining and bidi reordering
   are implemented; full Indic reordering and rare ligatures are not.
 - **Encrypted documents need their password** to be opened at all, which is

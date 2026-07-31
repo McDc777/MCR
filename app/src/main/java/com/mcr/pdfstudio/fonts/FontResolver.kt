@@ -98,10 +98,16 @@ object SystemFonts {
 
     /** Ordered best-first candidates per script bucket. */
     private val scriptCandidates: Map<Script, List<String>> = mapOf(
+        // Bundled TrueType builds come first: the .ttc Android ships is
+        // CFF-based OpenType, which PdfBox cannot embed as a Type 0 font.
         Script.CJK to listOf(
-            "NotoSansCJK-Regular.ttc", "NotoSansCJKjp-Regular.otf",
-            "NotoSerifCJK-Regular.ttc", "DroidSansFallback.ttf",
-            "NotoSansSC-Regular.otf",
+            "NotoSansSC-VF.ttf", "NotoSansTC-VF.ttf", "NotoSansHK-VF.ttf",
+            "NotoSansJP-VF.ttf",
+            "DroidSansFallback.ttf", "NotoSansCJK-Regular.ttc",
+        ),
+        Script.JAPANESE to listOf(
+            "NotoSansJP-VF.ttf", "NotoSansSC-VF.ttf", "NotoSansTC-VF.ttf",
+            "DroidSansFallback.ttf", "NotoSansCJK-Regular.ttc",
         ),
         Script.ARABIC to listOf(
             "NotoNaskhArabic-Regular.ttf", "NotoNaskhArabicUI-Regular.ttf",
@@ -129,21 +135,22 @@ object SystemFonts {
         Script.GEORGIAN to listOf("NotoSansGeorgian-Regular.ttf"),
         Script.ARMENIAN to listOf("NotoSansArmenian-Regular.ttf"),
         Script.HANGUL to listOf(
-            "NotoSansCJK-Regular.ttc", "NotoSansKR-Regular.otf",
-            "DroidSansFallback.ttf",
+            "NotoSansKR-VF.ttf", "NotoSansSC-VF.ttf",
+            "DroidSansFallback.ttf", "NotoSansCJK-Regular.ttc",
         ),
     )
 
     /** Face names inside NotoSansCJK-Regular.ttc, by script. */
     private val ttcFace: Map<Script, String> = mapOf(
-        Script.CJK to "NotoSansCJKjp-Regular",
+        Script.CJK to "NotoSansCJKsc-Regular",
+        Script.JAPANESE to "NotoSansCJKjp-Regular",
         Script.HANGUL to "NotoSansCJKkr-Regular",
     )
 
     enum class Script {
-        LATIN, CJK, HANGUL, ARABIC, HEBREW, DEVANAGARI, BENGALI, TAMIL, TELUGU,
-        KANNADA, MALAYALAM, GUJARATI, GURMUKHI, SINHALA, THAI, LAO, KHMER,
-        MYANMAR, ETHIOPIC, GEORGIAN, ARMENIAN,
+        LATIN, CJK, JAPANESE, HANGUL, ARABIC, HEBREW, DEVANAGARI, BENGALI,
+        TAMIL, TELUGU, KANNADA, MALAYALAM, GUJARATI, GURMUKHI, SINHALA, THAI,
+        LAO, KHMER, MYANMAR, ETHIOPIC, GEORGIAN, ARMENIAN,
     }
 
     fun scriptOf(text: String): Script {
@@ -152,6 +159,10 @@ object SystemFonts {
             val s = scriptOfChar(ch.code) ?: continue
             tally[s] = (tally[s] ?: 0) + 1
         }
+        // Kana is the giveaway for Japanese: Han characters alone are shared
+        // with Chinese, but any kana means the text wants Japanese glyph forms.
+        if (tally.containsKey(Script.JAPANESE)) return Script.JAPANESE
+
         // Non-Latin wins ties: a mostly-Latin string with CJK in it still needs
         // a CJK-capable font to render at all.
         val nonLatin = tally.filterKeys { it != Script.LATIN }
@@ -186,13 +197,39 @@ object SystemFonts {
         cp in 0x3130..0x318F -> Script.HANGUL
         cp in 0xAC00..0xD7AF -> Script.HANGUL
         cp in 0x2E80..0x303F -> Script.CJK
-        cp in 0x3040..0x30FF -> Script.CJK
+        // Hiragana and katakana.
+        cp in 0x3040..0x30FF -> Script.JAPANESE
         cp in 0x3400..0x4DBF -> Script.CJK
         cp in 0x4E00..0x9FFF -> Script.CJK
         cp in 0xF900..0xFAFF -> Script.CJK
         cp in 0xFB50..0xFEFF -> Script.ARABIC
         else -> null
     }
+
+    /**
+     * Every installed candidate for [script], best first.
+     *
+     * Callers walk this rather than taking the first hit, because a font
+     * existing is not the same as it being embeddable — the caller verifies it
+     * can actually encode the text before settling.
+     */
+    fun entriesFor(script: Script): List<FontEntry> {
+        val names = scriptCandidates[script] ?: latinCandidates
+        return names.mapNotNull { name ->
+            locate(name)?.let { file ->
+                FontEntry(
+                    name.substringBeforeLast('.'),
+                    file,
+                    if (name.endsWith(".ttc")) ttcFace[script] else null
+                )
+            }
+        }
+    }
+
+    fun latinEntries(): List<FontEntry> =
+        latinCandidates.mapNotNull { name ->
+            locate(name)?.let { FontEntry(name.substringBeforeLast('.'), it) }
+        }
 
     fun entryFor(script: Script): FontEntry? {
         val names = scriptCandidates[script] ?: latinCandidates
@@ -299,10 +336,17 @@ class FontBook(private val doc: PDDocument) {
      * embedded font and finally to stripping unsupported characters.
      */
     fun safeFontFor(text: String): PDFont {
-        val preferred = forText(text)
-        if (canEncode(preferred, text)) return preferred
-        val latin = SystemFonts.latinEntry()?.let { load(it) }
-        if (latin != null && canEncode(latin, text)) return latin
+        val script = SystemFonts.scriptOf(text)
+        // Walk the whole candidate list: a font may be present but unloadable
+        // (CFF-based OpenType) or simply missing the glyphs we need.
+        for (entry in SystemFonts.entriesFor(script)) {
+            val font = load(entry)
+            if (canEncode(font, text)) return font
+        }
+        for (entry in SystemFonts.latinEntries()) {
+            val font = load(entry)
+            if (canEncode(font, text)) return font
+        }
         return fallback()
     }
 }

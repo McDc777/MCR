@@ -96,6 +96,24 @@ jobs:
             fi
           done
 
+          # CJK lives in a different repository and must be TrueType-flavoured:
+          # PdfBox cannot embed the CFF-based OpenType builds that Android
+          # itself ships, so the device font is not a reliable fallback here.
+          CJK="NotoSansSC NotoSansTC NotoSansJP NotoSansKR NotoSansHK"
+          for family in $CJK; do
+            file="$family-VF.ttf"
+            noto="https://raw.githubusercontent.com/notofonts/noto-cjk/main/Sans/Variable/TTF/Subset/$file"
+            cdn="https://cdn.jsdelivr.net/gh/notofonts/noto-cjk@main/Sans/Variable/TTF/Subset/$file"
+            if curl -fsSL --retry 3 --max-time 300 -o "$DEST/$file" "$noto" \
+              || curl -fsSL --retry 3 --max-time 300 -o "$DEST/$file" "$cdn"; then
+              ok=$((ok + 1))
+              echo "  fetched $file ($(du -h "$DEST/$file" | cut -f1))"
+            else
+              rm -f "$DEST/$file"
+              missing="$missing $file"
+            fi
+          done
+
           echo "Bundled $ok font(s)."
           [ -n "$missing" ] && echo "Unavailable (system fonts will cover these):$missing"
           du -sh "$DEST" || true
