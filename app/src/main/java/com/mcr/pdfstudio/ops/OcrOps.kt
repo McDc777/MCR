@@ -4,6 +4,11 @@ import android.graphics.Bitmap
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.TextRecognizer
+import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import com.google.mlkit.vision.text.devanagari.DevanagariTextRecognizerOptions
+import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
+import com.google.mlkit.vision.text.korean.KoreanTextRecognizerOptions
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import com.mcr.pdfstudio.fonts.FontBook
 import com.mcr.pdfstudio.fonts.TextShaping
@@ -28,6 +33,43 @@ data class OcrPageResult(val pageIndex: Int, val lines: List<OcrLine>) {
 }
 
 /**
+ * Which recognition model to use.
+ *
+ * Each script has its own bundled model. [AUTO] runs them all and keeps
+ * whichever reads the page most convincingly, which is what you want when you
+ * do not know in advance what language a scan is in.
+ */
+enum class OcrScript(val label: String) {
+    AUTO("Detect automatically"),
+    LATIN("Latin — European, Turkish, Vietnamese…"),
+    CHINESE("Chinese"),
+    JAPANESE("Japanese"),
+    KOREAN("Korean"),
+    DEVANAGARI("Devanagari — Hindi, Marathi, Nepali…");
+
+    fun recognizer(): TextRecognizer = when (this) {
+        CHINESE -> TextRecognition.getClient(
+            ChineseTextRecognizerOptions.Builder().build()
+        )
+        JAPANESE -> TextRecognition.getClient(
+            JapaneseTextRecognizerOptions.Builder().build()
+        )
+        KOREAN -> TextRecognition.getClient(
+            KoreanTextRecognizerOptions.Builder().build()
+        )
+        DEVANAGARI -> TextRecognition.getClient(
+            DevanagariTextRecognizerOptions.Builder().build()
+        )
+        else -> TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+    }
+
+    companion object {
+        /** The concrete models AUTO sweeps through. */
+        val CONCRETE = listOf(LATIN, CHINESE, JAPANESE, KOREAN, DEVANAGARI)
+    }
+}
+
+/**
  * Optical character recognition for scanned documents.
  *
  * Recognised text is written back as an *invisible* text layer positioned over
@@ -39,7 +81,11 @@ object OcrOps {
     /** Recognition resolution. High enough for small print, low enough to be quick. */
     private const val OCR_DPI = 220
 
-    fun recognizePage(pdf: File, pageIndex: Int): OcrPageResult {
+    fun recognizePage(
+        pdf: File,
+        pageIndex: Int,
+        script: OcrScript = OcrScript.AUTO,
+    ): OcrPageResult {
         PdfRasterizer(pdf).use { raster ->
             if (pageIndex !in 0 until raster.pageCount) {
                 return OcrPageResult(pageIndex, emptyList())
@@ -51,7 +97,7 @@ object OcrOps {
             try {
                 return OcrPageResult(
                     pageIndex,
-                    recognizeBitmap(bitmap, widthPt.toFloat(), heightPt.toFloat())
+                    recognizeBitmap(bitmap, widthPt.toFloat(), heightPt.toFloat(), script)
                 )
             } finally {
                 bitmap.recycle()
@@ -59,7 +105,11 @@ object OcrOps {
         }
     }
 
-    fun recognizeAll(pdf: File, pages: List<Int>? = null): List<OcrPageResult> {
+    fun recognizeAll(
+        pdf: File,
+        pages: List<Int>? = null,
+        script: OcrScript = OcrScript.AUTO,
+    ): List<OcrPageResult> {
         val results = ArrayList<OcrPageResult>()
         PdfRasterizer(pdf).use { raster ->
             val targets = pages ?: (0 until raster.pageCount).toList()
@@ -72,7 +122,9 @@ object OcrOps {
                     results.add(
                         OcrPageResult(
                             index,
-                            recognizeBitmap(bitmap, widthPt.toFloat(), heightPt.toFloat())
+                            recognizeBitmap(
+                                bitmap, widthPt.toFloat(), heightPt.toFloat(), script
+                            )
                         )
                     )
                 } finally {
@@ -93,13 +145,41 @@ object OcrOps {
         bitmap: Bitmap,
         pageWidthPt: Float,
         pageHeightPt: Float,
+        script: OcrScript,
     ): List<OcrLine> {
-        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-        return try {
-            val result = Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)))
-            val scaleX = pageWidthPt / bitmap.width
-            val scaleY = pageHeightPt / bitmap.height
+        val image = InputImage.fromBitmap(bitmap, 0)
+        val scaleX = pageWidthPt / bitmap.width
+        val scaleY = pageHeightPt / bitmap.height
 
+        if (script != OcrScript.AUTO) {
+            return runModel(script, image, pageHeightPt, scaleX, scaleY)
+        }
+
+        // Every model will return *something*; the one that actually matches the
+        // page returns markedly more text, so score by recognised characters.
+        var best: List<OcrLine> = emptyList()
+        var bestScore = 0
+        for (candidate in OcrScript.CONCRETE) {
+            val lines = runModel(candidate, image, pageHeightPt, scaleX, scaleY)
+            val score = lines.sumOf { line -> line.text.count { !it.isWhitespace() } }
+            if (score > bestScore) {
+                bestScore = score
+                best = lines
+            }
+        }
+        return best
+    }
+
+    private fun runModel(
+        script: OcrScript,
+        image: InputImage,
+        pageHeightPt: Float,
+        scaleX: Float,
+        scaleY: Float,
+    ): List<OcrLine> {
+        val recognizer = script.recognizer()
+        return try {
+            val result = Tasks.await(recognizer.process(image))
             buildList {
                 for (block in result.textBlocks) {
                     for (line in block.lines) {

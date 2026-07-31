@@ -44,6 +44,68 @@ jobs:
           echo "MCR_KEY_ALIAS=mcr" >> "$GITHUB_ENV"
           echo "MCR_KEY_PASSWORD=sideload" >> "$GITHUB_ENV"
 
+      # Bundling fonts guarantees every script renders even on devices that ship
+      # a thin font set. They are fetched here rather than committed so the repo
+      # stays text-only; the app falls back to system fonts if any are missing.
+      - name: Fetch bundled fonts
+        run: |
+          set -uo pipefail
+          DEST=app/src/main/assets/fonts
+          mkdir -p "$DEST"
+
+          FAMILIES="
+          NotoSans/NotoSans-Regular
+          NotoSans/NotoSans-Bold
+          NotoSerif/NotoSerif-Regular
+          NotoNaskhArabic/NotoNaskhArabic-Regular
+          NotoSansHebrew/NotoSansHebrew-Regular
+          NotoSansDevanagari/NotoSansDevanagari-Regular
+          NotoSansBengali/NotoSansBengali-Regular
+          NotoSansTamil/NotoSansTamil-Regular
+          NotoSansTelugu/NotoSansTelugu-Regular
+          NotoSansKannada/NotoSansKannada-Regular
+          NotoSansMalayalam/NotoSansMalayalam-Regular
+          NotoSansGujarati/NotoSansGujarati-Regular
+          NotoSansGurmukhi/NotoSansGurmukhi-Regular
+          NotoSansSinhala/NotoSansSinhala-Regular
+          NotoSansThai/NotoSansThai-Regular
+          NotoSansLao/NotoSansLao-Regular
+          NotoSansKhmer/NotoSansKhmer-Regular
+          NotoSansMyanmar/NotoSansMyanmar-Regular
+          NotoSansEthiopic/NotoSansEthiopic-Regular
+          NotoSansGeorgian/NotoSansGeorgian-Regular
+          NotoSansArmenian/NotoSansArmenian-Regular
+          NotoSansThaana/NotoSansThaana-Regular
+          NotoSansCherokee/NotoSansCherokee-Regular
+          NotoSansMongolian/NotoSansMongolian-Regular
+          NotoSansTifinagh/NotoSansTifinagh-Regular
+          "
+
+          ok=0; missing=""
+          for entry in $FAMILIES; do
+            family="${entry%%/*}"
+            file="${entry##*/}.ttf"
+            gh_url="https://raw.githubusercontent.com/notofonts/notofonts.github.io/main/fonts/$family/hinted/ttf/$file"
+            cdn_url="https://cdn.jsdelivr.net/gh/notofonts/notofonts.github.io@main/fonts/$family/hinted/ttf/$file"
+            if curl -fsSL --retry 3 --max-time 90 -o "$DEST/$file" "$gh_url" \
+              || curl -fsSL --retry 3 --max-time 90 -o "$DEST/$file" "$cdn_url"; then
+              ok=$((ok + 1))
+            else
+              rm -f "$DEST/$file"
+              missing="$missing $file"
+            fi
+          done
+
+          echo "Bundled $ok font(s)."
+          [ -n "$missing" ] && echo "Unavailable (system fonts will cover these):$missing"
+          du -sh "$DEST" || true
+          # The app degrades to device fonts, so a partial fetch is not fatal —
+          # but a total failure means something is wrong with the source.
+          if [ "$ok" -eq 0 ]; then
+            echo "No fonts could be fetched" >&2
+            exit 1
+          fi
+
       - name: Build release APK
         run: |
           set -o pipefail

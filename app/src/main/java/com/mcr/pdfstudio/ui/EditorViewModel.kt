@@ -29,12 +29,16 @@ import com.mcr.pdfstudio.ops.FormOps
 import com.mcr.pdfstudio.ops.ImageFit
 import com.mcr.pdfstudio.ops.ImageFormat
 import com.mcr.pdfstudio.ops.OcrOps
+import com.mcr.pdfstudio.ops.OcrScript
 import com.mcr.pdfstudio.ops.PageOps
 import com.mcr.pdfstudio.ops.PageSize
 import com.mcr.pdfstudio.ops.Permissions
 import com.mcr.pdfstudio.ops.SecurityOps
 import com.mcr.pdfstudio.ops.ShapeKind
+import com.mcr.pdfstudio.ops.SignatureStore
+import com.mcr.pdfstudio.ops.SpeechReader
 import com.mcr.pdfstudio.ops.Stroke
+import com.mcr.pdfstudio.fonts.SystemFonts
 import com.mcr.pdfstudio.ops.TextDraw
 import com.mcr.pdfstudio.ops.TextHit
 import com.mcr.pdfstudio.ops.TextOps
@@ -217,6 +221,7 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
 
     override fun onCleared() {
         session?.close()
+        runCatching { speech.shutdown() }
         super.onCleared()
     }
 
@@ -457,6 +462,93 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             AnnotOps.stampImage(doc, currentPage, bitmap, x, y, width, height)
         }
 
+    // --------------------------------------------------------------- signature
+
+    var hasSignature by mutableStateOf(SignatureStore.exists(app))
+        private set
+
+    fun saveSignature(
+        strokes: List<List<android.graphics.PointF>>,
+        width: Int,
+        height: Int,
+        color: Int,
+    ) = work("Saving signature…") {
+        val bitmap = SignatureStore.render(strokes, width, height, color)
+        if (bitmap == null) {
+            message = "Nothing was drawn."
+            return@work
+        }
+        val ok = SignatureStore.save(getApplication(), bitmap)
+        bitmap.recycle()
+        hasSignature = SignatureStore.exists(getApplication())
+        message = if (ok) {
+            "Signature saved — tap the page to place it."
+        } else {
+            "The signature could not be saved."
+        }
+    }
+
+    fun clearSignature() {
+        SignatureStore.clear(getApplication())
+        hasSignature = false
+        message = "Signature removed"
+    }
+
+    /** Places the stored signature with its baseline near [x], [y]. */
+    fun stampSignature(x: Float, y: Float, widthPt: Float = 160f) = edit("Signing…") { doc ->
+        val bitmap = SignatureStore.load(getApplication()) ?: return@edit
+        try {
+            val height = widthPt * bitmap.height / bitmap.width
+            AnnotOps.stampImage(doc, currentPage, bitmap, x, y, widthPt, height)
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
+    // ------------------------------------------------------------- read aloud
+
+    private val speech: SpeechReader by lazy {
+        SpeechReader(getApplication()).also { reader ->
+            reader.observe { active -> speaking = active }
+        }
+    }
+
+    var speaking by mutableStateOf(false)
+        private set
+
+    fun readPageAloud() = work("Preparing speech…") {
+        val active = session ?: return@work
+        val text = active.read { doc ->
+            ConvertOut.toText(doc, currentPage + 1, currentPage + 1)
+        }.trim()
+
+        if (text.isBlank()) {
+            message = "No text on this page — run OCR first if it is a scan."
+            return@work
+        }
+        val problem = speech.speak(text, localeFor(text))
+        if (problem != null) message = problem
+    }
+
+    fun stopReading() {
+        speech.stop()
+    }
+
+    /** Picks a voice language from the page's dominant script. */
+    private fun localeFor(text: String): java.util.Locale =
+        when (SystemFonts.scriptOf(text)) {
+            SystemFonts.Script.CJK -> java.util.Locale.CHINESE
+            SystemFonts.Script.HANGUL -> java.util.Locale.KOREAN
+            SystemFonts.Script.ARABIC -> java.util.Locale("ar")
+            SystemFonts.Script.HEBREW -> java.util.Locale("he")
+            SystemFonts.Script.DEVANAGARI -> java.util.Locale("hi")
+            SystemFonts.Script.BENGALI -> java.util.Locale("bn")
+            SystemFonts.Script.TAMIL -> java.util.Locale("ta")
+            SystemFonts.Script.TELUGU -> java.util.Locale("te")
+            SystemFonts.Script.THAI -> java.util.Locale("th")
+            else -> java.util.Locale.getDefault()
+        }
+
     fun stampImageUri(uri: Uri, x: Float, y: Float, width: Float) = edit("Placing…") { doc ->
         val bitmap = ConvertIn.decodeScaled(getApplication(), uri) ?: return@edit
         try {
@@ -552,9 +644,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         message = "Details updated"
     }
 
-    fun runOcrCurrentPage() = work("Reading page…") {
+    fun runOcrCurrentPage(script: OcrScript = OcrScript.AUTO) = work("Reading page…") {
         val active = session ?: return@work
-        val result = OcrOps.recognizePage(active.workFile, currentPage)
+        val result = OcrOps.recognizePage(active.workFile, currentPage, script)
         if (result.lines.isEmpty()) {
             message = "No text recognised on this page."
             return@work
@@ -564,9 +656,9 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
         message = "Recognised ${result.lines.size} line(s); the page is now searchable."
     }
 
-    fun runOcrAllPages() = work("Reading all pages…") {
+    fun runOcrAllPages(script: OcrScript = OcrScript.AUTO) = work("Reading all pages…") {
         val active = session ?: return@work
-        val results = OcrOps.recognizeAll(active.workFile)
+        val results = OcrOps.recognizeAll(active.workFile, null, script)
         val lines = results.sumOf { it.lines.size }
         if (lines == 0) {
             message = "No text recognised."

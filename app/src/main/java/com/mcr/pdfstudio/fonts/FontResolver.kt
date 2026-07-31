@@ -24,13 +24,77 @@ data class FontEntry(
  * keeps the APK small and it means CJK, Arabic, Indic and friends work with
  * whatever coverage the phone already ships.
  */
+/**
+ * Fonts shipped inside the APK.
+ *
+ * PdfBox embeds from a [File], not an asset stream, so the bundled TTFs are
+ * unpacked once into app storage. This is what makes scripts work on devices
+ * whose own font set is thin — the device's fonts remain the fallback.
+ */
+object BundledFonts {
+
+    private const val ASSET_DIR = "fonts"
+
+    @Volatile
+    private var installed = false
+
+    /** Unpacks bundled fonts. Safe to call repeatedly; does the work once. */
+    fun install(context: android.content.Context) {
+        if (installed) return
+        synchronized(this) {
+            if (installed) return
+            val names = runCatching {
+                context.assets.list(ASSET_DIR)?.filter {
+                    it.endsWith(".ttf", true) || it.endsWith(".otf", true)
+                }
+            }.getOrNull().orEmpty()
+
+            if (names.isEmpty()) {
+                installed = true
+                return
+            }
+
+            val target = java.io.File(context.filesDir, "bundled-fonts").apply { mkdirs() }
+            for (name in names) {
+                val out = java.io.File(target, name)
+                // Assets never change for a given build, so skip anything the
+                // right size already.
+                if (out.isFile && out.length() > 0) continue
+                runCatching {
+                    context.assets.open("$ASSET_DIR/$name").use { input ->
+                        out.outputStream().use { output -> input.copyTo(output) }
+                    }
+                }.onFailure { out.delete() }
+            }
+
+            SystemFonts.bundledDir = target.takeIf {
+                it.listFiles()?.isNotEmpty() == true
+            }
+            installed = true
+        }
+    }
+}
+
 object SystemFonts {
 
     private const val DIR = "/system/fonts"
 
+    /** Set by [BundledFonts.install]; searched before the device's own fonts. */
+    @Volatile
+    var bundledDir: File? = null
+
     private val latinCandidates = listOf(
-        "Roboto-Regular.ttf", "NotoSans-Regular.ttf", "DroidSans.ttf",
+        "NotoSans-Regular.ttf", "Roboto-Regular.ttf", "DroidSans.ttf",
     )
+
+    /** Finds a font by file name, preferring the bundled copy. */
+    private fun locate(name: String): File? {
+        bundledDir?.let { dir ->
+            val bundled = File(dir, name)
+            if (bundled.isFile && bundled.length() > 0) return bundled
+        }
+        return File(DIR, name).takeIf { it.isFile }
+    }
 
     /** Ordered best-first candidates per script bucket. */
     private val scriptCandidates: Map<Script, List<String>> = mapOf(
@@ -133,8 +197,8 @@ object SystemFonts {
     fun entryFor(script: Script): FontEntry? {
         val names = scriptCandidates[script] ?: latinCandidates
         for (name in names) {
-            val f = File(DIR, name)
-            if (f.isFile) {
+            val f = locate(name)
+            if (f != null) {
                 val face = if (name.endsWith(".ttc")) ttcFace[script] else null
                 return FontEntry(name.substringBeforeLast('.'), f, face)
             }
@@ -144,8 +208,8 @@ object SystemFonts {
 
     fun latinEntry(): FontEntry? {
         for (name in latinCandidates) {
-            val f = File(DIR, name)
-            if (f.isFile) return FontEntry(name.substringBeforeLast('.'), f)
+            val f = locate(name)
+            if (f != null) return FontEntry(name.substringBeforeLast('.'), f)
         }
         // Last resort: any TTF at all.
         val any = File(DIR).listFiles { f -> f.name.endsWith(".ttf") }
@@ -154,17 +218,22 @@ object SystemFonts {
         return any?.let { FontEntry(it.name.substringBeforeLast('.'), it) }
     }
 
-    /** Fonts offered in the "insert text" font picker. */
+    /** Fonts offered in the "insert text" font picker: bundled, then device. */
     fun pickable(): List<FontEntry> {
-        val dir = File(DIR)
-        if (!dir.isDirectory) return emptyList()
-        return dir.listFiles { f ->
-            val n = f.name.lowercase()
-            (n.endsWith(".ttf") || n.endsWith(".ttc")) && !n.contains("emoji")
+        fun scan(dir: File?): List<FontEntry> {
+            if (dir == null || !dir.isDirectory) return emptyList()
+            return dir.listFiles { f ->
+                val n = f.name.lowercase()
+                (n.endsWith(".ttf") || n.endsWith(".ttc")) && !n.contains("emoji")
+            }
+                ?.sortedBy { it.name }
+                ?.map { FontEntry(it.name.substringBeforeLast('.'), it) }
+                .orEmpty()
         }
-            ?.sortedBy { it.name }
-            ?.map { FontEntry(it.name.substringBeforeLast('.'), it) }
-            .orEmpty()
+        // Bundled first, and drop device duplicates of the same file name.
+        val bundled = scan(bundledDir)
+        val taken = bundled.map { it.file.name }.toSet()
+        return bundled + scan(File(DIR)).filterNot { it.file.name in taken }
     }
 }
 

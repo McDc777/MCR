@@ -46,6 +46,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mcr.pdfstudio.core.PdfIo
 import com.mcr.pdfstudio.ops.ImageFit
 import com.mcr.pdfstudio.ops.PageSize
+import com.mcr.pdfstudio.ops.PdfPrinter
 import com.mcr.pdfstudio.ui.AiScreen
 import com.mcr.pdfstudio.ui.BusyOverlay
 import com.mcr.pdfstudio.ui.EditorViewModel
@@ -125,6 +126,8 @@ private fun AppRoot(
 ) {
     var showSettings by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
+    // Printing needs the Activity, not the application context.
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     // ------------------------------------------------------------- launchers
 
@@ -265,6 +268,20 @@ private fun AppRoot(
                             vm = vm,
                             onPickMergeFiles = {
                                 pickMerge.launch(arrayOf("application/pdf"))
+                            },
+                            onPrint = {
+                                val active = vm.session
+                                if (active == null) {
+                                    vm.message = "Open a document first."
+                                } else {
+                                    runCatching {
+                                        PdfPrinter.print(
+                                            context, active.workFile, vm.title
+                                        )
+                                    }.onFailure {
+                                        vm.message = it.message ?: "Printing is unavailable."
+                                    }
+                                }
                             },
                             modifier = Modifier.fillMaxSize()
                         )

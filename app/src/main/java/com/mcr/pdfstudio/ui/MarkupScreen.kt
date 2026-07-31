@@ -57,6 +57,7 @@ private enum class MarkupTool(val label: String) {
     ARROW("Arrow"),
     ERASE("White-out"),
     NOTE("Note"),
+    SIGNATURE("Signature"),
 }
 
 /**
@@ -83,6 +84,8 @@ fun MarkupScreen(
     var dragStart by remember { mutableStateOf<Offset?>(null) }
     var dragEnd by remember { mutableStateOf<Offset?>(null) }
     var notePoint by remember { mutableStateOf<Offset?>(null) }
+    var showSignaturePad by remember { mutableStateOf(false) }
+    var signatureWidth by remember { mutableStateOf(160f) }
 
     val pageIndex = vm.currentPage
     val aspect = remember(pageIndex, vm.docRevision) { vm.pageAspect(pageIndex) }
@@ -169,7 +172,7 @@ fun MarkupScreen(
                 )
             }
 
-            MarkupTool.NOTE -> Unit
+            MarkupTool.NOTE, MarkupTool.SIGNATURE -> Unit
         }
         clearPending()
     }
@@ -192,7 +195,27 @@ fun MarkupScreen(
                         )
                     }
                 }
-                if (tool != MarkupTool.ERASE && tool != MarkupTool.NOTE) {
+                if (tool == MarkupTool.SIGNATURE) {
+                    LabeledSlider(
+                        "Signature width ${signatureWidth.toInt()}pt",
+                        signatureWidth, 60f..400f, { signatureWidth = it }
+                    )
+                    androidx.compose.foundation.layout.Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(onClick = { showSignaturePad = true }) {
+                            Text(if (vm.hasSignature) "Redraw" else "Draw signature")
+                        }
+                        if (vm.hasSignature) {
+                            OutlinedButton(onClick = { vm.clearSignature() }) {
+                                Text("Forget")
+                            }
+                        }
+                    }
+                }
+                if (tool != MarkupTool.ERASE && tool != MarkupTool.NOTE &&
+                    tool != MarkupTool.SIGNATURE
+                ) {
                     SwatchRow(
                         colors = if (tool == MarkupTool.HIGHLIGHTER) HIGHLIGHTS else SWATCHES,
                         selected = color,
@@ -210,6 +233,11 @@ fun MarkupScreen(
                         MarkupTool.HIGHLIGHTER -> "Swipe across text to highlight."
                         MarkupTool.ERASE -> "Drag a box to white it out."
                         MarkupTool.NOTE -> "Tap the page to drop a sticky note."
+                        MarkupTool.SIGNATURE -> if (vm.hasSignature) {
+                            "Tap where the signature should go."
+                        } else {
+                            "Draw your signature once, then tap to place it."
+                        }
                         else -> "Drag from one corner to the other."
                     },
                     style = MaterialTheme.typography.bodySmall,
@@ -239,6 +267,15 @@ fun MarkupScreen(
                         .pointerInput(tool, pageIndex) {
                             if (tool == MarkupTool.NOTE) {
                                 detectTapGestures { offset -> notePoint = offset }
+                            } else if (tool == MarkupTool.SIGNATURE) {
+                                detectTapGestures { offset ->
+                                    if (vm.hasSignature) {
+                                        val p = toPdf(offset)
+                                        vm.stampSignature(p.x, p.y, signatureWidth)
+                                    } else {
+                                        showSignaturePad = true
+                                    }
+                                }
                             } else if (tool == MarkupTool.PEN ||
                                 tool == MarkupTool.HIGHLIGHTER
                             ) {
@@ -324,6 +361,16 @@ fun MarkupScreen(
                 OutlinedButton(onClick = { vm.clearMarkup() }) { Text("Strip notes") }
             }
         }
+    }
+
+    if (showSignaturePad) {
+        SignaturePadDialog(
+            onSave = { strokes, width, height, color ->
+                vm.saveSignature(strokes, width, height, color)
+                showSignaturePad = false
+            },
+            onDismiss = { showSignaturePad = false }
+        )
     }
 
     notePoint?.let { point ->

@@ -15,14 +15,8 @@ android {
         versionCode = 1
         versionName = "1.0"
         vectorDrawables.useSupportLibrary = true
-
-        ndk {
-            // The bundled OCR model ships one native library per ABI and is by
-            // far the largest thing in the APK. Phones are ARM; x86_64 keeps
-            // emulators and Chromebooks working. Dropping 32-bit x86 — which no
-            // current device uses — saves around 11 MB.
-            abiFilters += setOf("arm64-v8a", "armeabi-v7a", "x86_64")
-        }
+        // Every ABI is shipped in one universal APK: capability and
+        // install-anywhere beat download size for this app.
     }
 
     signingConfigs {
@@ -112,7 +106,14 @@ dependencies {
     implementation(libs.androidx.security.crypto)
 
     implementation(libs.pdfbox.android)
+
+    // Every bundled recognition script. Each carries its own model, which is
+    // most of the APK — deliberately traded for offline OCR in any of them.
     implementation(libs.mlkit.text.recognition)
+    implementation(libs.mlkit.text.recognition.chinese)
+    implementation(libs.mlkit.text.recognition.devanagari)
+    implementation(libs.mlkit.text.recognition.japanese)
+    implementation(libs.mlkit.text.recognition.korean)
 
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.2")
 }

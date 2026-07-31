@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.mcr.pdfstudio.core.DocumentMeta
 import com.mcr.pdfstudio.ops.ImageFormat
+import com.mcr.pdfstudio.ops.OcrScript
 import com.mcr.pdfstudio.ops.Permissions
 import com.mcr.pdfstudio.ops.WatermarkSpec
 
@@ -35,6 +36,7 @@ import com.mcr.pdfstudio.ops.WatermarkSpec
 fun ToolsScreen(
     vm: EditorViewModel,
     onPickMergeFiles: () -> Unit,
+    onPrint: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -42,6 +44,7 @@ fun ToolsScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
     ) {
+        PrintAndSpeakSection(vm, onPrint)
         ExportSection(vm)
         CombineSection(vm, onPickMergeFiles)
         OcrSection(vm)
@@ -49,6 +52,31 @@ fun ToolsScreen(
         SecuritySection(vm)
         MetadataSection(vm)
         Column(Modifier.height(24.dp)) {}
+    }
+}
+
+@Composable
+private fun PrintAndSpeakSection(vm: EditorViewModel, onPrint: () -> Unit) {
+    SectionCard("Print and listen") {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Button(onClick = onPrint) { Text("Print") }
+                if (vm.speaking) {
+                    OutlinedButton(onClick = { vm.stopReading() }) { Text("Stop reading") }
+                } else {
+                    OutlinedButton(onClick = { vm.readPageAloud() }) {
+                        Text("Read page aloud")
+                    }
+                }
+            }
+            Text(
+                "Print goes through Android, so \"Save as PDF\" and any set-up " +
+                    "printer both work. Reading aloud uses the page's own " +
+                    "language when your device has that voice.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -120,6 +148,8 @@ private fun CombineSection(vm: EditorViewModel, onPickMergeFiles: () -> Unit) {
 
 @Composable
 private fun OcrSection(vm: EditorViewModel) {
+    var script by remember { mutableStateOf(OcrScript.AUTO) }
+
     SectionCard("Recognise text (OCR)") {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
@@ -129,11 +159,26 @@ private fun OcrSection(vm: EditorViewModel) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Dropdown(
+                label = "Script",
+                options = OcrScript.entries.toList(),
+                selected = script,
+                labelOf = { it.label },
+                onSelect = { script = it }
+            )
+            Text(
+                "Automatic tries every bundled model and keeps whichever reads " +
+                    "the page best. Picking the script directly is faster.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = { vm.runOcrCurrentPage() }) {
+                Button(onClick = { vm.runOcrCurrentPage(script) }) {
                     Text("This page")
                 }
-                OutlinedButton(onClick = { vm.runOcrAllPages() }) { Text("Every page") }
+                OutlinedButton(onClick = { vm.runOcrAllPages(script) }) {
+                    Text("Every page")
+                }
             }
         }
     }
