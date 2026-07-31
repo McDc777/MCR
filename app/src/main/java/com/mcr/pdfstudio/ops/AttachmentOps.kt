@@ -6,6 +6,7 @@ import com.mcr.pdfstudio.core.PdfIo
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.PDDocumentNameDictionary
 import com.tom_roush.pdfbox.pdmodel.PDEmbeddedFilesNameTreeNode
+import com.tom_roush.pdfbox.pdmodel.common.PDNameTreeNode
 import com.tom_roush.pdfbox.pdmodel.common.filespecification.PDComplexFileSpecification
 import com.tom_roush.pdfbox.pdmodel.common.filespecification.PDEmbeddedFile
 import java.io.ByteArrayInputStream
@@ -49,7 +50,9 @@ object AttachmentOps {
     }
 
     private fun collect(
-        node: PDEmbeddedFilesNameTreeNode,
+        // Kid nodes come back as the generic tree type, not the embedded-files
+        // subclass, so the walker has to be declared against the base.
+        node: PDNameTreeNode<PDComplexFileSpecification>,
         out: MutableMap<String, PDComplexFileSpecification>,
         depth: Int,
     ) {
@@ -93,7 +96,9 @@ object AttachmentOps {
         }
         val spec = PDComplexFileSpecification().apply {
             file = name
-            filename = name
+            // Unicode variant so non-ASCII names survive; `filename` itself is
+            // derived and has no setter.
+            fileUnicode = name
             this.embeddedFile = embedded
             fileDescription = "Attached with MCR PDF Studio"
         }
