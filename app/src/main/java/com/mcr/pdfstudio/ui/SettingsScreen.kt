@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.mcr.pdfstudio.core.Prefs
+import com.mcr.pdfstudio.ui.vanta.vantaBackdrop
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
@@ -38,8 +39,13 @@ fun SettingsScreen(vm: EditorViewModel, onBack: () -> Unit) {
     var model by remember { mutableStateOf(vm.aiModel) }
 
     Scaffold(
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        modifier = Modifier.vantaBackdrop(),
         topBar = {
             TopAppBar(
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = androidx.compose.ui.graphics.Color.Transparent
+                ),
                 title = { Text("Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {

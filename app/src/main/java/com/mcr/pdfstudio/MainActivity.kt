@@ -61,6 +61,7 @@ import com.mcr.pdfstudio.ui.TextScreen
 import com.mcr.pdfstudio.ui.ToolsScreen
 import com.mcr.pdfstudio.ui.ViewerScreen
 import com.mcr.pdfstudio.ui.theme.McrTheme
+import com.mcr.pdfstudio.ui.vanta.vantaBackdrop
 import java.io.File
 
 class MainActivity : ComponentActivity() {
@@ -187,10 +188,17 @@ private fun AppRoot(
     }
 
     Scaffold(
+        // The glass samples whatever is behind it, so the scaffold must not
+        // paint over the backdrop.
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        modifier = Modifier.vantaBackdrop(),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             if (vm.hasDocument) {
                 TopAppBar(
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                        containerColor = androidx.compose.ui.graphics.Color.Transparent
+                    ),
                     title = {
                         Column {
                             Text(
@@ -243,7 +251,9 @@ private fun AppRoot(
                     ScrollableTabRow(
                         selectedTabIndex = vm.tab.ordinal,
                         modifier = Modifier.fillMaxWidth(),
-                        edgePadding = 8.dp
+                        edgePadding = 8.dp,
+                        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                        divider = {}
                     ) {
                         EditorTab.entries.forEach { entry ->
                             Tab(

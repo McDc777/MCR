@@ -38,6 +38,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.PaddingValues
+import com.mcr.pdfstudio.ui.vanta.VantaSurface
+import com.mcr.pdfstudio.ui.vanta.VantaTokens
+import com.mcr.pdfstudio.ui.vanta.VantaVariant
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.ui.geometry.Offset
@@ -149,21 +153,62 @@ fun ZoomablePage(
     }
 }
 
+/**
+ * Gives a surface a stable identity so neighbours never share a stroke.
+ *
+ * The golden-angle engine separates hues by index; deriving that index from the
+ * title keeps a given section the same colour across recompositions and screen
+ * visits, which matters more here than perfect uniqueness.
+ */
+fun vantaIndexFor(key: String): Int = kotlin.math.abs(key.hashCode()) % 12
+
 @Composable
 fun SectionCard(
     title: String,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
-    Card(modifier = modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) {
-        Column(Modifier.padding(14.dp)) {
-            Text(
-                title,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(bottom = 10.dp)
-            )
-            content()
-        }
+    VantaSurface(
+        modifier = modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 5.dp),
+        variant = VantaVariant.Panel,
+        seed = "mcr-section",
+        index = vantaIndexFor(title),
+        contentPadding = PaddingValues(18.dp)
+    ) {
+        Text(
+            title,
+            style = MaterialTheme.typography.titleMedium,
+            color = VantaTokens.InkOnDark,
+            modifier = Modifier.padding(bottom = 12.dp)
+        )
+        content()
+    }
+}
+
+/** A glass action button. Colour rides the stroke; the fill stays colourless. */
+@Composable
+fun VantaButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    prominent: Boolean = false,
+) {
+    VantaSurface(
+        modifier = modifier,
+        variant = VantaVariant.Button,
+        seed = "mcr-button",
+        index = vantaIndexFor(text),
+        onClick = onClick,
+        enabled = enabled,
+        active = prominent,
+        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 11.dp)
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            maxLines = 1
+        )
     }
 }
 
@@ -225,20 +270,27 @@ fun BusyOverlay(label: String?) {
     Box(
         Modifier
             .fillMaxSize()
-            .background(Color.Black.copy(alpha = 0.45f))
+            .background(Color.Black.copy(alpha = 0.55f))
             .pointerInput(Unit) { detectTransformGestures { _, _, _, _ -> } },
         contentAlignment = Alignment.Center
     ) {
-        Surface(shape = RoundedCornerShape(16.dp), tonalElevation = 6.dp) {
+        VantaSurface(
+            modifier = Modifier.padding(32.dp),
+            variant = VantaVariant.Panel,
+            seed = "mcr-busy",
+            active = true,
+            contentPadding = PaddingValues(28.dp)
+        ) {
             Column(
-                Modifier.padding(28.dp),
+                Modifier.align(Alignment.CenterHorizontally),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(color = VantaTokens.InkOnDark)
                 Text(
                     label,
                     modifier = Modifier.padding(top = 14.dp),
                     textAlign = TextAlign.Center,
+                    color = VantaTokens.InkOnDark,
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
