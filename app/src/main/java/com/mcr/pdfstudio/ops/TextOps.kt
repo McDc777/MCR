@@ -101,7 +101,9 @@ object TextOps {
             runs.add(
                 TextRun(
                     pageIndex = pageIndex,
-                    text = text,
+                    // Same radical-vs-ideograph repair as plain extraction, so
+                    // search and replace match what the user actually typed.
+                    text = TextShaping.normalizeExtracted(text),
                     x = x,
                     y = y,
                     width = width,

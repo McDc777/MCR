@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import com.mcr.pdfstudio.core.PdfIo
+import com.mcr.pdfstudio.fonts.TextShaping
 import com.mcr.pdfstudio.viewer.PdfRasterizer
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
@@ -123,7 +124,7 @@ object ConvertOut {
             startPage = fromPage
             endPage = toPage
         }
-        return stripper.getText(doc)
+        return TextShaping.normalizeExtracted(stripper.getText(doc))
     }
 
     fun toTextFile(context: Context, doc: PDDocument, baseName: String): File {

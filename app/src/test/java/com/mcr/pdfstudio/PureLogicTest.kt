@@ -122,6 +122,21 @@ class PureLogicTest {
         assertEquals(SystemFonts.Script.LATIN, SystemFonts.scriptOf("Hello world"))
     }
 
+    @Test
+    fun `kangxi radicals are folded back to real ideographs`() {
+        // U+2F00 KANGXI RADICAL SCRIPT looks identical to U+6587 but compares
+        // unequal, which is how CJK text silently stops being searchable.
+        assertEquals("中文字體", TextShaping.normalizeExtracted("中\u2F00字體"))
+    }
+
+    @Test
+    fun `normalising leaves ordinary text and full-width forms alone`() {
+        assertEquals("Report 2024", TextShaping.normalizeExtracted("Report 2024"))
+        // Full-width Latin must survive: folding it would be information loss.
+        assertEquals("ＡＢ", TextShaping.normalizeExtracted("ＡＢ"))
+        assertEquals("سلام", TextShaping.normalizeExtracted("سلام"))
+    }
+
     // ------------------------------------------------------------- parsing
 
     @Test

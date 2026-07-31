@@ -43,6 +43,35 @@ object TextShaping {
         return out.toString()
     }
 
+    /**
+     * Repairs text coming back out of a PDF.
+     *
+     * CJK fonts map an ideograph and its lookalike Kangxi radical to the same
+     * glyph, so a font's reverse glyph lookup can record the radical instead of
+     * the ideograph — 文 (U+6587) comes back as ⽂ (U+2F00). They are visually
+     * identical but compare unequal, which silently breaks copy and search.
+     *
+     * Only the two radical blocks are folded; NFKC over the whole string would
+     * also rewrite full-width Latin, ligatures and circled digits, which is real
+     * information loss.
+     */
+    fun normalizeExtracted(text: String): String {
+        if (text.none { it.code in 0x2E80..0x2FDF }) return text
+
+        val out = StringBuilder(text.length)
+        for (ch in text) {
+            if (ch.code in 0x2E80..0x2FDF) {
+                val folded = java.text.Normalizer.normalize(
+                    ch.toString(), java.text.Normalizer.Form.NFKC
+                )
+                out.append(folded)
+            } else {
+                out.append(ch)
+            }
+        }
+        return out.toString()
+    }
+
     fun needsBidi(text: String): Boolean =
         text.any { it.code in 0x0590..0x08FF || it.code in 0xFB1D..0xFEFF }
 
