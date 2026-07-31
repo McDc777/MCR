@@ -49,6 +49,7 @@ import com.mcr.pdfstudio.ops.PageSize
 import com.mcr.pdfstudio.ops.PdfPrinter
 import com.mcr.pdfstudio.ui.AiScreen
 import com.mcr.pdfstudio.ui.BusyOverlay
+import com.mcr.pdfstudio.ui.DocumentScreen
 import com.mcr.pdfstudio.ui.EditorViewModel
 import com.mcr.pdfstudio.ui.FormsScreen
 import com.mcr.pdfstudio.ui.HomeScreen
@@ -146,6 +147,10 @@ private fun AppRoot(
     val pickStamp = rememberLauncherForOpenDocument { uri ->
         // Dropped near the top-left of the page at a readable size.
         uri?.let { vm.stampImageUri(it, 72f, 520f, 200f) }
+    }
+
+    val pickAttachment = rememberLauncherForOpenDocument { uri ->
+        uri?.let { vm.attachFile(it) }
     }
 
     val createDocument = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -283,6 +288,11 @@ private fun AppRoot(
                                     }
                                 }
                             },
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        EditorTab.DOCUMENT -> DocumentScreen(
+                            vm = vm,
+                            onPickAttachment = { pickAttachment.launch(arrayOf("*/*")) },
                             modifier = Modifier.fillMaxSize()
                         )
                         EditorTab.AI -> AiScreen(

@@ -137,6 +137,92 @@ object WatermarkOps {
         }
     }
 
+    /**
+     * Six-slot header and footer stamping with Bates numbering.
+     *
+     * Placeholders: `{n}` page number, `{total}` page count, `{bates}` the
+     * sequential Bates number, `{date}` today, `{title}` the document title.
+     * Bates numbering is what legal and audit work uses to give every page in a
+     * production a unique, ordered identifier.
+     */
+    fun applyHeaderFooter(
+        doc: PDDocument,
+        fonts: FontBook,
+        headerLeft: String = "",
+        headerCenter: String = "",
+        headerRight: String = "",
+        footerLeft: String = "",
+        footerCenter: String = "",
+        footerRight: String = "",
+        fontSize: Float = 9f,
+        margin: Float = 28f,
+        color: Int = 0xFF404040.toInt(),
+        batesStart: Int = 1,
+        batesPrefix: String = "",
+        batesDigits: Int = 6,
+        startNumber: Int = 1,
+    ) {
+        val slots = listOf(
+            headerLeft, headerCenter, headerRight,
+            footerLeft, footerCenter, footerRight
+        )
+        if (slots.all { it.isBlank() }) return
+
+        val total = doc.numberOfPages
+        val today = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
+            .format(java.util.Date())
+        val title = doc.documentInformation?.title.orEmpty()
+
+        for (index in 0 until total) {
+            val page = doc.getPage(index)
+            val box = page.cropBox ?: page.mediaBox
+            val bates = batesPrefix +
+                (batesStart + index).toString().padStart(batesDigits.coerceIn(1, 12), '0')
+
+            fun expand(template: String): String = template
+                .replace("{n}", (index + startNumber).toString())
+                .replace("{total}", total.toString())
+                .replace("{bates}", bates)
+                .replace("{date}", today)
+                .replace("{title}", title)
+
+            PDPageContentStream(
+                doc, page, PDPageContentStream.AppendMode.APPEND, true, true
+            ).use { cs ->
+                cs.setNonStrokingColor(
+                    (color shr 16 and 0xFF) / 255f,
+                    (color shr 8 and 0xFF) / 255f,
+                    (color and 0xFF) / 255f
+                )
+                slots.forEachIndexed { slot, template ->
+                    if (template.isBlank()) return@forEachIndexed
+                    val text = expand(template)
+                    val font = fonts.safeFontFor(text)
+                    val drawn = TextShaping.sanitizeFor(font, TextShaping.toVisual(text))
+                        ?: return@forEachIndexed
+                    val width = TextShaping.width(font, drawn, fontSize)
+
+                    val x = when (slot % 3) {
+                        0 -> box.lowerLeftX + margin
+                        1 -> box.lowerLeftX + (box.width - width) / 2f
+                        else -> box.upperRightX - margin - width
+                    }
+                    val y = if (slot < 3) {
+                        box.upperRightY - margin
+                    } else {
+                        box.lowerLeftY + margin - fontSize
+                    }
+
+                    cs.beginText()
+                    cs.setFont(font, fontSize)
+                    cs.newLineAtOffset(x, y)
+                    runCatching { cs.showText(drawn) }
+                    cs.endText()
+                }
+            }
+        }
+    }
+
     private fun alphaState(opacity: Float): PDExtendedGraphicsState {
         val clamped = opacity.coerceIn(0.02f, 1f)
         return PDExtendedGraphicsState().apply {

@@ -21,6 +21,14 @@ import com.mcr.pdfstudio.core.PdfIo
 import com.mcr.pdfstudio.core.Prefs
 import com.mcr.pdfstudio.fonts.FontBook
 import com.mcr.pdfstudio.ops.AnnotOps
+import com.mcr.pdfstudio.ops.Attachment
+import com.mcr.pdfstudio.ops.AttachmentOps
+import com.mcr.pdfstudio.ops.Bookmark
+import com.mcr.pdfstudio.ops.GeometryOps
+import com.mcr.pdfstudio.ops.Imposition
+import com.mcr.pdfstudio.ops.OptimizeOps
+import com.mcr.pdfstudio.ops.OptimizeResult
+import com.mcr.pdfstudio.ops.OutlineOps
 import com.mcr.pdfstudio.ops.ConvertIn
 import com.mcr.pdfstudio.ops.ConvertOut
 import com.mcr.pdfstudio.ops.FieldKind
@@ -59,6 +67,7 @@ enum class Tab(val label: String) {
     MARKUP("Markup"),
     FORMS("Forms"),
     TOOLS("Tools"),
+    DOCUMENT("Document"),
     AI("AI"),
 }
 
@@ -720,6 +729,164 @@ class EditorViewModel(app: Application) : AndroidViewModel(app) {
             getApplication(), active.workFile, PdfIo.sanitize(active.displayName)
         )
         pendingExport = Export(listOf(file), "application/pdf", "Ready to share")
+    }
+
+    // --------------------------------------------------------------- structure
+
+    var bookmarks = mutableStateListOf<Bookmark>()
+        private set
+    var attachments = mutableStateListOf<Attachment>()
+        private set
+
+    fun loadBookmarks() = work("Reading bookmarks…") {
+        val active = session ?: return@work
+        val items = active.read { doc -> OutlineOps.read(doc) }
+        withContext(Dispatchers.Main) {
+            bookmarks.clear()
+            bookmarks.addAll(items)
+        }
+        if (items.isEmpty()) message = "This document has no bookmarks."
+    }
+
+    fun addBookmark(title: String) = work("Adding bookmark…") {
+        val active = session ?: return@work
+        active.mutate { doc -> OutlineOps.add(doc, title, currentPage) }
+        val items = active.read { doc -> OutlineOps.read(doc) }
+        withContext(Dispatchers.Main) {
+            bookmarks.clear()
+            bookmarks.addAll(items)
+        }
+        message = "Bookmarked page ${currentPage + 1}"
+    }
+
+    fun generateBookmarks() = work("Building outline…") {
+        val active = session ?: return@work
+        active.mutate { doc -> OutlineOps.generatePerPage(doc) }
+        val items = active.read { doc -> OutlineOps.read(doc) }
+        withContext(Dispatchers.Main) {
+            bookmarks.clear()
+            bookmarks.addAll(items)
+        }
+    }
+
+    fun clearBookmarks() = work("Clearing…") {
+        val active = session ?: return@work
+        active.mutate { doc -> OutlineOps.clear(doc) }
+        withContext(Dispatchers.Main) { bookmarks.clear() }
+    }
+
+    /** Moves the viewer to [pageIndex] and shows it. */
+    fun goToPage(pageIndex: Int) {
+        if (pageIndex in 0 until pageCount) {
+            currentPage = pageIndex
+            tab = Tab.VIEW
+        }
+    }
+
+    fun loadAttachments() = work("Reading attachments…") {
+        val active = session ?: return@work
+        val items = active.read { doc -> AttachmentOps.list(doc) }
+        withContext(Dispatchers.Main) {
+            attachments.clear()
+            attachments.addAll(items)
+        }
+        if (items.isEmpty()) message = "No files are attached to this document."
+    }
+
+    fun attachFile(uri: Uri) = work("Attaching…") {
+        val active = session ?: return@work
+        var ok = false
+        active.mutate { doc -> ok = AttachmentOps.add(getApplication(), doc, uri) }
+        val items = active.read { doc -> AttachmentOps.list(doc) }
+        withContext(Dispatchers.Main) {
+            attachments.clear()
+            attachments.addAll(items)
+        }
+        message = if (ok) "Attached" else "That file could not be attached."
+    }
+
+    fun extractAttachments() = work("Extracting…") {
+        val active = session ?: return@work
+        val files = active.read { doc -> AttachmentOps.extractAll(getApplication(), doc) }
+        if (files.isEmpty()) {
+            message = "There is nothing to extract."
+            return@work
+        }
+        pendingExport = Export(files, "*/*", "${files.size} attachment(s) extracted")
+    }
+
+    // ---------------------------------------------------------------- geometry
+
+    fun cropPages(
+        left: Float,
+        right: Float,
+        top: Float,
+        bottom: Float,
+        allPages: Boolean,
+    ) = edit("Cropping…") { doc ->
+        if (allPages) {
+            GeometryOps.cropAll(doc, left, right, top, bottom)
+        } else {
+            GeometryOps.crop(doc, currentPage, left, right, top, bottom)
+        }
+    }
+
+    fun resetCrop(allPages: Boolean) = edit("Restoring…") { doc ->
+        GeometryOps.resetCrop(doc, allPages, currentPage)
+    }
+
+    fun impose(layout: Imposition, size: PageSize, landscape: Boolean) =
+        work("Rearranging…") {
+            val active = session ?: return@work
+            val rebuilt = active.read { doc ->
+                GeometryOps.impose(doc, layout, size, landscape)
+            }
+            rebuilt.use { active.replaceWith(it) }
+            refreshDerived()
+            message = "Now ${pageCount} sheet(s) at ${layout.perSheet} page(s) each"
+        }
+
+    fun optimize(maxEdge: Int, quality: Float, alsoStripMetadata: Boolean) =
+        work("Optimising…") {
+            val active = session ?: return@work
+            val before = active.workFile.length()
+            var result = OptimizeResult(0, 0)
+            active.mutate { doc ->
+                result = OptimizeOps.optimize(doc, maxEdge, quality)
+                if (alsoStripMetadata) OptimizeOps.stripMetadata(doc)
+            }
+            refreshDerived()
+            val after = active.workFile.length()
+            message = if (result.imagesTouched == 0) {
+                "Nothing to shrink — no oversized images found."
+            } else {
+                "Recompressed ${result.imagesTouched} image(s): " +
+                    "${before / 1024}kB to ${after / 1024}kB"
+            }
+        }
+
+    fun applyHeaderFooter(
+        headerLeft: String,
+        headerCenter: String,
+        headerRight: String,
+        footerLeft: String,
+        footerCenter: String,
+        footerRight: String,
+        batesPrefix: String,
+        batesStart: Int,
+    ) = edit("Stamping…") { doc ->
+        WatermarkOps.applyHeaderFooter(
+            doc = doc,
+            fonts = FontBook(doc),
+            headerLeft = headerLeft,
+            headerCenter = headerCenter,
+            headerRight = headerRight,
+            footerLeft = footerLeft,
+            footerCenter = footerCenter,
+            footerRight = footerRight,
+            batesStart = batesStart,
+            batesPrefix = batesPrefix
+        )
     }
 
     // ---------------------------------------------------------------------- AI
