@@ -124,9 +124,9 @@ class PureLogicTest {
 
     @Test
     fun `kangxi radicals are folded back to real ideographs`() {
-        // U+2F00 KANGXI RADICAL SCRIPT looks identical to U+6587 but compares
-        // unequal, which is how CJK text silently stops being searchable.
-        assertEquals("中文字體", TextShaping.normalizeExtracted("中\u2F00字體"))
+        // U+2F42 KANGXI RADICAL SCRIPT looks identical to U+6587 but compares
+        // unequal — the substitution that silently stopped CJK being searchable.
+        assertEquals("中文字體", TextShaping.normalizeExtracted("中\u2F42字體"))
     }
 
     @Test
