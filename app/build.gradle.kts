@@ -92,15 +92,16 @@ android {
     testOptions {
         unitTests.isReturnDefaultValues = true
 
-        // A headless emulator Gradle manages itself, so device testing needs no
-        // third-party CI action. ATD images are the slim, automation-focused
-        // builds — no Play Services, which we do not use anyway.
+        // A headless emulator Gradle manages itself, so device testing needs
+        // no third-party CI action.
         managedDevices {
             devices {
                 create<com.android.build.api.dsl.ManagedVirtualDevice>("testDevice") {
-                    device = "Pixel 6"
+                    // Pixel 2 and a plain AOSP image are the combination with
+                    // the widest system-image availability.
+                    device = "Pixel 2"
                     apiLevel = 30
-                    systemImageSource = "aosp-atd"
+                    systemImageSource = "aosp"
                 }
             }
         }

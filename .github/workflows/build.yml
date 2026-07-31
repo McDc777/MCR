@@ -182,8 +182,12 @@ jobs:
             {
               echo "Device tests FAILED for ${GITHUB_SHA:0:7}"
               echo
-              grep -E "FAILED|AssertionError|Expected|expected:|Caused by|^e: " \
-                "$RUNNER_TEMP/device.log" | head -50
+              grep -E "FAILED|AssertionError|expected:|Caused by|^e: " \
+                "$RUNNER_TEMP/device.log" | head -30
+              echo
+              sed -n '/What went wrong/,/^\* Try/p' "$RUNNER_TEMP/device.log" | head -25
+              echo
+              tail -25 "$RUNNER_TEMP/device.log"
             } > "$RUNNER_TEMP/t.txt"
           fi
           git config user.name "github-actions"
