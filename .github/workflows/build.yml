@@ -133,12 +133,15 @@ jobs:
           mkdir -p "$DEST"
 
           ok=0; missing=""
+          # tessdata_best is the float LSTM model: several times larger than the
+          # standard build and measurably more accurate, which is the trade we
+          # want for Arabic-script text.
           for lang in fas ara; do
             file="$lang.traineddata"
-            std="https://raw.githubusercontent.com/tesseract-ocr/tessdata/main/$file"
             best="https://raw.githubusercontent.com/tesseract-ocr/tessdata_best/main/$file"
-            if curl -fsSL --retry 3 --max-time 300 -o "$DEST/$file" "$std" \
-              || curl -fsSL --retry 3 --max-time 300 -o "$DEST/$file" "$best"; then
+            std="https://raw.githubusercontent.com/tesseract-ocr/tessdata/main/$file"
+            if curl -fsSL --retry 3 --max-time 300 -o "$DEST/$file" "$best" \
+              || curl -fsSL --retry 3 --max-time 300 -o "$DEST/$file" "$std"; then
               ok=$((ok + 1))
               echo "  fetched $file ($(du -h "$DEST/$file" | cut -f1))"
             else

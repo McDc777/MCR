@@ -48,9 +48,16 @@ phone itself, tap it, and allow installation when Android asks.
 **Scans**
 - On-device OCR that writes recognised words back as an invisible text layer,
   so the page looks identical but becomes searchable and selectable
-- Five bundled recognition models — Latin, Chinese, Japanese, Korean and
-  Devanagari — plus an automatic mode that runs them all and keeps whichever
-  reads the page best. All offline; nothing is downloaded on first use.
+- Seven bundled recognition models — Latin, Chinese, Japanese, Korean and
+  Devanagari through ML Kit, plus Persian/Farsi and Arabic through Tesseract's
+  LSTM engine, since ML Kit has no Arabic-script model at all
+- Automatic mode sweeps the fast ML Kit models first, then falls back to
+  Tesseract when a page reads as near-empty — which is exactly how an
+  Arabic-script scan looks to every ML Kit model
+- The invisible text layer is written in logical order without Arabic shaping,
+  so copying and searching return ordinary characters rather than presentation
+  forms
+- All offline; nothing is downloaded on first use.
 
 **Document structure**
 - Bookmarks: read the outline, jump to any entry, add your own, or generate
@@ -108,7 +115,8 @@ Two PDF engines, each doing what it is best at:
 | --- | --- |
 | Rendering pages to screen and to images | `android.graphics.pdf.PdfRenderer` |
 | Reading and rewriting document structure | PdfBox-Android |
-| OCR | ML Kit on-device text recognition |
+| OCR (Latin, CJK, Devanagari) | ML Kit on-device text recognition |
+| OCR (Persian, Arabic) | Tesseract 4 LSTM |
 
 ```
 core/     document session, undo snapshots, SAF I/O, preferences
@@ -136,7 +144,7 @@ signed with a freshly generated sideload key, so if Android refuses to install
 over an older build, uninstall the previous version first.
 
 The APK is deliberately a single universal build with every ABI, all five OCR
-models and all bundled fonts — around 90 MB. Nothing is fetched at first run,
+models and all bundled fonts — around 120 MB. Nothing is fetched at first run,
 so everything works with no network and no Play Services.
 
 Build outcomes are published as an annotated `ci-status` tag, so failures can
@@ -153,8 +161,11 @@ rather than opening the Actions UI.
   encode the new characters. Subsetted fonts frequently cannot — a font
   embedded with only the glyphs for "Invoice" has no `z` to give you — and then
   the closest font on the device is substituted.
-- **OCR covers five scripts.** Latin, Chinese, Japanese, Korean and Devanagari
-  are bundled. Arabic, Thai and Hebrew have no on-device model available.
+- **OCR covers seven languages.** Latin, Chinese, Japanese, Korean,
+  Devanagari, Persian and Arabic. Persian and Arabic use the `tessdata_best`
+  LSTM models, which are the most accurate available but slower than ML Kit.
+  Adding more Tesseract languages (Urdu, Pashto, Hebrew, Thai…) is one line in
+  the build workflow.
 - **Complex-script shaping is simplified.** Arabic joining and bidi reordering
   are implemented; full Indic reordering and rare ligatures are not.
 - **Encrypted documents need their password** to be opened at all, which is
