@@ -147,7 +147,31 @@ The APK is deliberately a single universal build with every ABI, all five OCR
 models and all bundled fonts — around 120 MB. Nothing is fetched at first run,
 so everything works with no network and no Play Services.
 
-Build outcomes are published as an annotated `ci-status` tag, so failures can
+## Tests
+
+```sh
+./gradlew :app:testDebugUnitTest        # pure logic, no device
+./gradlew :app:testDeviceDebugAndroidTest   # real engine, headless emulator
+```
+
+Unit tests cover the parts most likely to be subtly wrong and least likely to
+be noticed: Arabic contextual forms and the lam-alef ligature, bidi ordering,
+script detection, and text repair on extraction.
+
+The on-device tests are the ones that matter. They run the real engine on an
+emulator Gradle manages itself, covering save/reopen round-trips, same-font
+replacement, page operations, imposition, bookmarks, undo/redo, and whether
+CJK and Persian can actually be embedded — a failure that degrades quietly
+rather than throwing. One test edits a document repeatedly and re-parses it,
+guarding the staging-file save path.
+
+They have already earned their keep: they caught that writing 文 (U+6587) and
+reading it back returned ⽂ (U+2F42, a Kangxi radical). The correct glyph is
+drawn, but the text layer held a character that looks identical and compares
+unequal, silently breaking copy, search and replace on CJK.
+
+Build outcomes are published as an annotated `ci-status` tag, and device test
+results as `ci-tests`, so failures can
 be read with `git fetch origin refs/tags/ci-status && git cat-file tag ci-status`
 rather than opening the Actions UI.
 
@@ -170,3 +194,7 @@ rather than opening the Actions UI.
   are implemented; full Indic reordering and rare ligatures are not.
 - **Encrypted documents need their password** to be opened at all, which is
   the point of encryption.
+- **Kangxi folding is applied on the way out, not in the file.** Text this app
+  extracts, searches and replaces is repaired; a PDF it writes may still carry
+  the radical codepoint in its ToUnicode map, so another viewer could copy the
+  lookalike character. Fixing that needs a change inside PdfBox.
