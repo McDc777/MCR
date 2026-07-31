@@ -17,6 +17,8 @@ android {
         vectorDrawables.useSupportLibrary = true
         // Every ABI is shipped in one universal APK: capability and
         // install-anywhere beat download size for this app.
+
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
@@ -86,6 +88,23 @@ android {
     lint {
         abortOnError = false
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+
+        // A headless emulator Gradle manages itself, so device testing needs no
+        // third-party CI action. ATD images are the slim, automation-focused
+        // builds — no Play Services, which we do not use anyway.
+        managedDevices {
+            devices {
+                create<com.android.build.api.dsl.ManagedVirtualDevice>("testDevice") {
+                    device = "Pixel 6"
+                    apiLevel = 30
+                    systemImageSource = "aosp-atd"
+                }
+            }
+        }
+    }
 }
 
 dependencies {
@@ -120,4 +139,13 @@ dependencies {
     implementation(libs.tesseract4android)
 
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.2")
+
+    testImplementation("junit:junit:4.13.2")
+    // The JVM's android.jar stubs org.json; supply a real one so the parsing
+    // tests exercise the actual code path.
+    testImplementation("org.json:json:20240303")
+
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test:core-ktx:1.6.1")
 }
