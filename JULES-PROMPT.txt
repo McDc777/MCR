@@ -1,0 +1,7 @@
+This repo is Glass Widget: a Windows desktop widgets app built with Electron (main.js, preload.js, src/).
+First, run it and read every file, then write a short plan listing every bug, crash, broken button, layout problem and slow spot you find.
+Fix all of them, one clear commit per problem, and say in each commit message how you proved the fix.
+Then make it better with your own creative ideas: smoother animations, a richer glass look with moving neon edges, better settings, new useful widgets.
+Keep it Windows-only, keep every existing feature working, and never remove a feature to make something else easier.
+Add simple automated tests for the main parts so future changes can be checked.
+At the end, write CHANGES.md in plain, simple English: what was broken, what you fixed, what you added, and how to try each thing.
