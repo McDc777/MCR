@@ -167,10 +167,8 @@ function renderClock(stage) {
     $("#hMin").setAttribute("transform", `rotate(${min * 6} 100 100)`);
     $("#hHour").setAttribute("transform", `rotate(${hr * 30} 100 100)`);
     $("#clkCenter").textContent = `${h12}:${pad(d.getMinutes())}`;
-    if (!document.getElementById("clockBody")) return; // window closed
-    requestAnimationFrame(tick);
   }
-  applyMode(); requestAnimationFrame(tick);
+  applyMode(); tick(); setInterval(tick, 1000);
   REFRESH.clock = applyMode;
 }
 

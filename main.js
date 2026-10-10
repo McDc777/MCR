@@ -65,12 +65,19 @@ function createWidget(type, widget_id = null) {
 
   // Offset slightly for multiple new instances
   const count = Object.keys(wins).filter(k => k.startsWith(type + '-')).length;
-  const dp = DEFAULT_POS[type] || { x: 60, y: 60 };
 
-  const defX = wa.x + clampN(dp.x + (count * 20), 10, wa.width - cfg.w - 10);
-  const defY = wa.y + clampN(dp.y + (count * 20), 10, wa.height - cfg.h - 10);
+  // Use saved bounds from the last closed instance of this type, or default
+  state.lastBounds = state.lastBounds || {};
+  const fallback = state.lastBounds[type] || DEFAULT_POS[type] || { x: 60, y: 60, width: cfg.w, height: cfg.h };
+
+  const defX = wa.x + clampN((fallback.x || 60) + (count * 20), 10, wa.width - cfg.w - 10);
+  const defY = wa.y + clampN((fallback.y || 60) + (count * 20), 10, wa.height - cfg.h - 10);
+
+  const widthToUse = b.width || fallback.width || cfg.w;
+  const heightToUse = b.height || fallback.height || cfg.h;
+
   const win = new BrowserWindow({
-    width: b.width || cfg.w, height: b.height || cfg.h,
+    width: widthToUse, height: heightToUse,
     x: (typeof b.x === 'number') ? b.x : defX,
     y: (typeof b.y === 'number') ? b.y : defY,
     minWidth: Math.round(cfg.w * 0.45), minHeight: Math.round(cfg.h * 0.45),
@@ -87,13 +94,19 @@ function createWidget(type, widget_id = null) {
   let t;
   const saveB = () => { clearTimeout(t); t = setTimeout(() => { if (win.isDestroyed()) return; state.widgets[id].bounds = win.getBounds(); saveState(); }, 300); };
   win.on('resize', saveB); win.on('move', saveB);
-  win.on('closed', () => { delete wins[id]; updateTray(); });
+  win.on('closed', () => { delete wins[id]; updateTray(); broadcastWidgets(); });
   wins[id] = win;
-  saveState(); updateTray();
+  saveState(); updateTray(); broadcastWidgets();
   return win;
 }
 function closeWidget(id) {
-  if (wins[id] && !wins[id].isDestroyed()) wins[id].close();
+  if (wins[id] && !wins[id].isDestroyed()) {
+      // Save bounds before closing
+      const type = state.widgets[id]?.type || id.split('-')[0];
+      state.lastBounds = state.lastBounds || {};
+      state.lastBounds[type] = wins[id].getBounds();
+      wins[id].close();
+  }
   if (state.widgets[id]) {
       state.widgets[id].open = false;
       // If it's not the hub and closed, we could keep it or delete it.
@@ -102,13 +115,24 @@ function closeWidget(id) {
           delete state.widgets[id];
       }
   }
-  saveState(); updateTray();
+  saveState(); updateTray(); broadcastWidgets();
 }
 function spawnNewWidget(type) { createWidget(type); }
 
 function broadcast(ch, ...a) { Object.values(wins).forEach(w => { if (w && !w.isDestroyed()) w.webContents.send(ch, ...a); }); }
-// We don't really need toggleWidget or openMap in the same way since they are multi-instance now.
-// For the Hub, we'll just expose spawnNewWidget.
+
+function getWidgetsState() {
+  const m = {};
+  Object.keys(wins).forEach(id => {
+      if (wins[id] && !wins[id].isDestroyed()) {
+          const type = state.widgets[id]?.type || id.split('-')[0];
+          m[type] = (m[type] || 0) + 1;
+      }
+  });
+  return m;
+}
+
+function broadcastWidgets() { broadcast('widgets-state', getWidgetsState()); }
 
 function setPin(v) {
   state.pinned = !!v; saveState();
@@ -196,15 +220,7 @@ function init() {
   ipcMain.handle('win:getPin', () => !!state.pinned);
   ipcMain.on('win:close', (e) => { const w = BrowserWindow.fromWebContents(e.sender); if (w && w.widgetId) closeWidget(w.widgetId); });
   ipcMain.handle('widget:spawn', (e, type) => { spawnNewWidget(type); });
-  ipcMain.handle('widgets:state', () => {
-      // We still need a way to tell the hub what types are running for highlight, maybe not strict toggle though.
-      const m = {};
-      Object.keys(wins).forEach(id => {
-          const type = state.widgets[id]?.type || id.split('-')[0];
-          m[type] = (m[type] || 0) + 1;
-      });
-      return m;
-  });
+  ipcMain.handle('widgets:state', () => getWidgetsState());
   ipcMain.handle('notify', (e, t, b) => { try { new Notification({ title: t || 'Glass Widget', body: b || '', silent: true }).show(); } catch (er) {} });
   ipcMain.handle('autostart:get', () => !!state.autoStart);
   ipcMain.handle('autostart:set', (e, v) => { applyAutoStart(v); return state.autoStart; });
