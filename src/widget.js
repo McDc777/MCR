@@ -349,35 +349,6 @@ function renderCalc(stage) {
     <button class="calc" data-k="1">1</button><button class="calc" data-k="2">2</button><button class="calc" data-k="3">3</button><button class="calc op" data-k="+">+</button>
     <button class="calc" data-k="0">0</button><button class="calc" data-k=".">.</button><button class="calc eq" data-k="=">=</button></div></div>`;
   let s = "0"; const disp = $("#calcDisplay"); const upd = () => disp.textContent = (s.length > 14 && s !== "Error") ? String(Number(s)) : s;
-  // safe manual evaluator (no eval — CSP blocks Function())
-  const ev = (str) => {
-    str = String(str).replace(/\s+/g, "").replace(/[+\-*/.]+$/, "");
-    if (str === "") return 0;
-    if (!/^[-+*/.\d]+$/.test(str)) return null;
-    const nums = [], ops = []; let i = 0, wantNum = true;
-    while (i < str.length) {
-      let c = str[i];
-      if (!wantNum && "+-*/".includes(c)) {
-        ops.push(c); i++; wantNum = true; continue;
-      }
-      if (wantNum) {
-        let sign = 1;
-        while (i < str.length && (str[i] === "+" || str[i] === "-")) {
-          if (str[i] === "-") sign *= -1;
-          i++;
-        }
-        let start = i;
-        while (i < str.length && /[\d.]/.test(str[i])) i++;
-        if (i === start) return null;
-        const n = parseFloat(str.slice(start, i)); if (isNaN(n)) return null;
-        nums.push(sign * n); wantNum = false;
-      }
-    }
-    if (wantNum) return null;
-    for (let k = 0; k < ops.length;) { if (ops[k] === "*" || ops[k] === "/") { const r = ops[k] === "*" ? nums[k] * nums[k + 1] : nums[k] / nums[k + 1]; nums.splice(k, 2, r); ops.splice(k, 1); } else k++; }
-    let acc = nums[0]; for (let k = 0; k < ops.length; k++) acc = ops[k] === "+" ? acc + nums[k + 1] : acc - nums[k + 1];
-    return isFinite(acc) ? Math.round(acc * 1e10) / 1e10 : null;
-  };
   const apply = (k) => {
     if (k === "C") s = "0";
     else if (k === "=") { const r = ev(s); s = (r === null) ? "Error" : String(r); }

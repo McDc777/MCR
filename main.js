@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, Notification, nativeImage, scre
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
+const { readJSON, writeJSON } = require('./src/store');
 
 const APP_ID = 'com.emerald.glasswidget';
 app.setAppUserModelId(APP_ID);
@@ -12,8 +13,6 @@ const stateFile = path.join(userDir, 'state.json');
 const trayPng = path.join(__dirname, 'src', 'tray.png');
 const iconIco = path.join(__dirname, 'build', 'icon.ico');
 
-function readJSON(f, d) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } }
-function writeJSON(f, o) { try { fs.writeFileSync(f, JSON.stringify(o)); } catch (e) {} }
 function clampN(v, a, b) { return Math.max(a, Math.min(b, v)); }
 
 // Each widget is its own window. w/h = design size (also the locked aspect ratio).
