@@ -13,4 +13,4 @@
 * **System Monitor Widget**: Added a brand new "SysMon" widget that shows your PC's real-time CPU usage, RAM capacity, and uptime in gorgeous animated rings.
 * **Richer Glassmorphism**: Supercharged the visual design with a slowly panning dynamic background, a stronger backdrop blur effect, and an awesome moving neon conic-gradient border around the edge of all widgets.
 * **Buttery Smooth Interactions**: Every button, input, and widget load now features highly responsive fluid CSS animations using cubic-bezier easing.
-* **Automated Tests**: Added an e2e test script so developers can easily verify the app boots without catastrophic crashes in the future. The test script has also been expanded to run assertions on the JSON store and the internal math parser.
+* **Automated Tests**: You can now run `npm test`. We added an extensive `test.js` script with unit tests that strictly verify the manual calculator `ev()` function works properly, checks the JSON state storage layer for data loss, and spawns the Electron app headless to assert that no uncaught exceptions trigger on boot.
