@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self';" />
+  <title>Glass Widget</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="widget" class="widget">
+    <!-- Title bar -->
+    <header class="titlebar" id="titlebar">
+      <div class="tb-left">
+        <button class="icon-btn add-note-btn" id="addNoteBtn" title="New note">+</button>
+        <div class="brand" id="brandClock">
+          <span class="brand-dot"></span>
+          <div class="clock">
+            <span id="clockTime">--:--</span>
+            <span id="clockDate" class="clock-date">—</span>
+          </div>
+        </div>
+        <div class="min-chips" id="minChips"></div>
+      </div>
+      <div class="tb-right">
+        <button class="icon-btn" id="settingsBtn" title="Settings">
+          <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8m9 4a7 7 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7 7 0 0 0-2-1.2l-.4-2.6H9.9l-.4 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6A7 7 0 0 0 3 12c0 .4 0 .8.1 1.2l-2 1.6 2 3.4 2.4-1a7 7 0 0 0 2 1.2l.4 2.6h4.2l.4-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2"/></svg>
+        </button>
+        <button class="icon-btn" id="pinBtn" title="Pin on top">
+          <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M14 4v5l2 3v2h-5v5l-1 1-1-1v-5H4v-2l2-3V4z"/></svg>
+        </button>
+        <button class="icon-btn" id="minBtn" title="Minimise">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M5 11h14v2H5z"/></svg>
+        </button>
+        <button class="icon-btn" id="maxBtn" title="Maximise">
+          <svg viewBox="0 0 24 24" width="13" height="13"><path fill="none" stroke="currentColor" stroke-width="2" d="M4 4h16v16H4z"/></svg>
+        </button>
+        <button class="icon-btn close-btn" id="closeBtn" title="Hide to tray">
+          <svg viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18.3 5.7 12 12l6.3 6.3-1.4 1.4L10.6 13.4 4.3 19.7 2.9 18.3 9.2 12 2.9 5.7 4.3 4.3l6.3 6.3 6.3-6.3z"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="body" id="body">
+      <!-- LEFT: Notes -->
+      <section class="col-left" id="colLeft">
+        <div class="panel notes-panel" data-panel="notes" id="panel-notes">
+          <div class="panel-head">
+            <span class="panel-title"><span class="pi">🗒️</span> NOTES</span>
+            <span class="panel-ctrls">
+              <button class="pc" data-act="min" title="Minimise">–</button>
+              <button class="pc" data-act="max" title="Maximise">▢</button>
+              <button class="pc" data-act="close" title="Close">✕</button>
+            </span>
+          </div>
+          <div class="panel-body notes-inner">
+            <div class="note-top">
+              <input id="noteTitle" class="note-title" placeholder="Note title" />
+              <button class="chip" id="newNoteBtn">+ New</button>
+              <button class="chip" id="showAllBtn">All notes</button>
+            </div>
+            <div id="noteEditor" class="note-editor" contenteditable="true" spellcheck="true"></div>
+            <div class="note-toolbar">
+              <button class="fmt" data-cmd="bold" title="Bold"><b>B</b></button>
+              <button class="fmt" data-cmd="italic" title="Italic"><i>I</i></button>
+              <button class="fmt" data-cmd="underline" title="Underline"><u>U</u></button>
+              <button class="fmt" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+              <button class="fmt" data-cmd="insertUnorderedList" title="Bullet list">
+                <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M4 6a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3m0 5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3m0 5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3M9 6.5h11v2H9zm0 5h11v2H9zm0 5h11v2H9z"/></svg>
+              </button>
+              <button class="fmt" id="imgBtn" title="Insert image">
+                <svg viewBox="0 0 24 24" width="15" height="15"><path fill="currentColor" d="M21 5v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2M5 19h14l-4.5-6-3.5 4.5-2.5-3z"/><circle cx="8" cy="8.5" r="1.6" fill="currentColor"/></svg>
+              </button>
+              <input type="file" id="imgInput" accept="image/*" hidden />
+            </div>
+            <div class="notes-list" id="notesList" hidden></div>
+          </div>
+        </div>
+      </section>
+
+      <div class="divider" id="divider" title="Drag to resize"></div>
+
+      <!-- RIGHT: panels -->
+      <aside class="col-right" id="colRight">
+        <!-- Reminders -->
+        <div class="panel" data-panel="reminders" id="panel-reminders">
+          <div class="panel-head">
+            <span class="panel-title"><span class="pi">🔔</span> REMINDERS</span>
+            <span class="panel-ctrls"><button class="pc" data-act="min">–</button><button class="pc" data-act="max">▢</button><button class="pc" data-act="close">✕</button></span>
+          </div>
+          <div class="panel-body">
+            <input id="remText" class="field" placeholder="Type a reminder" />
+            <div class="row two">
+              <input type="date" id="remDate" class="field" />
+              <input type="time" id="remTime" class="field" />
+            </div>
+            <button class="primary" id="remSet">Set</button>
+            <div class="mini-list" id="remList"></div>
+          </div>
+        </div>
+
+        <!-- Events -->
+        <div class="panel" data-panel="events" id="panel-events">
+          <div class="panel-head">
+            <span class="panel-title"><span class="pi">📅</span> EVENTS</span>
+            <span class="panel-ctrls"><button class="pc" data-act="min">–</button><button class="pc" data-act="max">▢</button><button class="pc" data-act="close">✕</button></span>
+          </div>
+          <div class="panel-body">
+            <div class="cal-top">
+              <button class="chip" id="calPrev">‹</button>
+              <span id="calLabel" class="cal-label">—</span>
+              <button class="chip" id="calNext">›</button>
+            </div>
+            <div class="calendar" id="calendar"></div>
+            <div class="event-add" id="eventAdd" hidden>
+              <input type="time" id="evTime" class="field small" />
+              <input id="evTitle" class="field" placeholder="Event title" />
+              <button class="chip add" id="evAdd">Add</button>
+            </div>
+            <div class="mini-list" id="evList"></div>
+          </div>
+        </div>
+
+        <!-- Timer / Stopwatch -->
+        <div class="panel" data-panel="timer" id="panel-timer">
+          <div class="panel-head">
+            <span class="panel-title"><span class="pi">⏱️</span> <span id="timerTitle">TIMER</span></span>
+            <span class="panel-ctrls">
+              <span class="seg">
+                <button class="seg-btn active" id="tabTimer">Timer</button>
+                <button class="seg-btn" id="tabStop">Stop</button>
+              </span>
+              <button class="pc" data-act="min">–</button><button class="pc" data-act="max">▢</button><button class="pc" data-act="close">✕</button>
+            </span>
+          </div>
+          <div class="panel-body">
+            <div id="timerView">
+              <div class="timer-wrap">
+                <svg class="ring" viewBox="0 0 120 120">
+                  <circle class="ring-bg" cx="60" cy="60" r="52" />
+                  <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="52" />
+                </svg>
+                <div class="timer-display" id="timerDisplay">25:00</div>
+              </div>
+              <div class="presets">
+                <button class="chip" data-min="5">5m</button>
+                <button class="chip" data-min="10">10m</button>
+                <button class="chip" data-min="15">15m</button>
+                <button class="chip" data-min="25">25m</button>
+                <button class="chip" id="tMinus">−1</button>
+                <button class="chip" id="tPlus">+1</button>
+              </div>
+              <div class="row two">
+                <button class="primary" id="timerToggle">Start</button>
+                <button class="ghost" id="timerReset">Reset</button>
+              </div>
+            </div>
+            <div id="stopView" hidden>
+              <div class="timer-wrap"><div class="timer-display big" id="stopDisplay">00:00.0</div></div>
+              <div class="row two">
+                <button class="primary" id="stopToggle">Start</button>
+                <button class="ghost" id="stopReset">Reset</button>
+              </div>
+              <button class="chip wide" id="lapBtn">Lap</button>
+              <div class="mini-list" id="lapList"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- To-do -->
+        <div class="panel" data-panel="todo" id="panel-todo">
+          <div class="panel-head">
+            <span class="panel-title"><span class="pi">✔️</span> TO-DO</span>
+            <span class="panel-ctrls"><button class="pc" data-act="min">–</button><button class="pc" data-act="max">▢</button><button class="pc" data-act="close">✕</button></span>
+          </div>
+          <div class="panel-body">
+            <div class="row">
+              <input id="todoText" class="field" placeholder="Add a task" />
+              <button class="chip add" id="todoAdd">Add</button>
+            </div>
+            <div class="mini-list" id="todoList"></div>
+          </div>
+        </div>
+
+        <!-- Calculator -->
+        <div class="panel" data-panel="calc" id="panel-calc">
+          <div class="panel-head">
+            <span class="panel-title"><span class="pi">🧮</span> CALCULATOR</span>
+            <span class="panel-ctrls"><button class="pc" data-act="min">–</button><button class="pc" data-act="max">▢</button><button class="pc" data-act="close">✕</button></span>
+          </div>
+          <div class="panel-body">
+            <div class="calc-display" id="calcDisplay">0</div>
+            <div class="calc-grid" id="calcGrid">
+              <button class="calc op" data-k="C">C</button>
+              <button class="calc op" data-k="±">±</button>
+              <button class="calc op" data-k="%">%</button>
+              <button class="calc op" data-k="/">÷</button>
+              <button class="calc" data-k="7">7</button>
+              <button class="calc" data-k="8">8</button>
+              <button class="calc" data-k="9">9</button>
+              <button class="calc op" data-k="*">×</button>
+              <button class="calc" data-k="4">4</button>
+              <button class="calc" data-k="5">5</button>
+              <button class="calc" data-k="6">6</button>
+              <button class="calc op" data-k="-">−</button>
+              <button class="calc" data-k="1">1</button>
+              <button class="calc" data-k="2">2</button>
+              <button class="calc" data-k="3">3</button>
+              <button class="calc op" data-k="+">+</button>
+              <button class="calc" data-k="0">0</button>
+              <button class="calc" data-k=".">.</button>
+              <button class="calc eq" data-k="=">=</button>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="resize-grip" id="grip" title="Drag to resize">
+      <svg viewBox="0 0 16 16" width="14" height="14"><path fill="none" stroke="currentColor" stroke-width="1.3" d="M14 6 6 14M14 11l-3 3M14 1 1 14"/></svg>
+    </div>
+
+    <!-- Settings overlay -->
+    <div class="settings-overlay" id="settingsOverlay" hidden>
+      <div class="settings-card">
+        <div class="set-head"><span>⚙️ Settings</span><button class="pc" id="setClose">✕</button></div>
+
+        <div class="set-block">
+          <label class="set-label">Transparency <span id="opacityVal" class="set-val"></span></label>
+          <input type="range" id="opacityRange" min="15" max="95" step="1" class="range" />
+          <div class="set-hint">Left = more see-through, right = more solid.</div>
+        </div>
+
+        <div class="set-block">
+          <div class="set-title">Panels</div>
+          <div class="set-panels" id="setPanels"></div>
+        </div>
+
+        <div class="set-block">
+          <label class="set-check"><input type="checkbox" id="tglClock" /> <span>Show clock &amp; date</span></label>
+          <label class="set-check"><input type="checkbox" id="autoStartChk" /> <span>Start with Windows</span></label>
+        </div>
+
+        <div class="set-sep"></div>
+        <button class="pop-btn" id="quitBtn">Quit widget</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
